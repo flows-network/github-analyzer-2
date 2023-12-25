@@ -1,0 +1,11 @@
+/target
+Cargo.lock
+user.json
+compare.txt
+.env
+/report
+/records
+res1.json
+res2.json
+prettier.json
+temp.json
