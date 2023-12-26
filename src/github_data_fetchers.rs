@@ -1,10 +1,10 @@
-use crate::octocrab_compat::{Comment, Issue, Repository, User};
-use crate::utils::*;
+use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
+use github_flows::{get_octo, octocrab, GithubLogin};
+use crate::{reports, utils::*};
+use anyhow::anyhow;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derivative::Derivative;
-use github_flows::{get_octo, octocrab, GithubLogin};
-use http_req::response::Response;
-use http_req::uri::Uri;
+use http_req::response::{self, Response};
 use openai_flows::{
     self,
     chat::{self, ChatOptions},
@@ -36,7 +36,7 @@ pub enum MemoryType {
     Meta,
 }
 
-pub async fn get_user_profile(github_token: &str, user: &str) -> Option<User> {
+pub async fn get_user_profile(user: &str) -> Option<User> {
     let user_profile_url = format!("https://api.github.com/users/{user}");
 
     let octocrab = get_octo(&GithubLogin::Default);
@@ -46,7 +46,8 @@ pub async fn get_user_profile(github_token: &str, user: &str) -> Option<User> {
         .await
         .ok()
 }
-pub async fn get_user_data_by_login(github_token: &str, login: &str) -> Option<String> {
+
+pub async fn get_user_data_by_login(login: &str) -> anyhow::Result<String> {
     #[derive(Debug, Deserialize)]
     struct User {
         name: Option<String>,
@@ -73,7 +74,6 @@ pub async fn get_user_data_by_login(github_token: &str, login: &str) -> Option<S
         data: Option<RepositoryOwner>,
     }
 
-    let base_url = "https://api.github.com/graphql";
     let mut out = String::from("USER_profile: \n");
 
     let query = format!(
@@ -96,87 +96,71 @@ pub async fn get_user_data_by_login(github_token: &str, login: &str) -> Option<S
         "#
     );
 
-    match github_http_post(&github_token, base_url, &&query).await {
-        None => {
-            log::info!("Failed to send the request to get UserRoot: {}", base_url);
-            return None;
-        }
-        Some(res) => match serde_json::from_slice::<UserRoot>(res.as_slice()) {
-            Err(e) => {
-                log::error!("Failed to parse the response for UserRoot: {}", e);
-                return None;
-            }
-            Ok(results) => {
-                if let Some(repository_owner) = &results.data {
-                    if let Some(user) = &repository_owner.repository_owner {
-                        let login_str = match &user.login {
-                            Some(login) => format!("Login: {},", login),
-                            None => {
-                                return None;
-                            }
-                        };
+    let octocrab = get_octo(&GithubLogin::Default);
 
-                        let name_str = match &user.name {
-                            Some(name) => format!("Name: {},", name),
-                            None => String::new(),
-                        };
+    let res: UserRoot = octocrab.graphql::<UserRoot>(&query).await?;
+    if let Some(repository_owner) = &res.data {
+        if let Some(user) = &repository_owner.repository_owner {
+            let login_str = match &user.login {
+                Some(login) => format!("Login: {},", login),
+                None => String::new(),
+            };
 
-                        let url_str = match &user.url {
-                            Some(url) => format!("Url: {},", url),
-                            None => String::new(),
-                        };
+            let name_str = match &user.name {
+                Some(name) => format!("Name: {},", name),
+                None => String::new(),
+            };
 
-                        let twitter_str = match &user.twitter_username {
-                            Some(twitter) => format!("Twitter: {},", twitter),
-                            None => String::new(),
-                        };
+            let url_str = match &user.url {
+                Some(url) => format!("Url: {},", url),
+                None => String::new(),
+            };
 
-                        let bio_str = match &user.bio {
-                            Some(bio) if bio.is_empty() => String::new(),
-                            Some(bio) => format!("Bio: {},", bio),
-                            None => String::new(),
-                        };
+            let twitter_str = match &user.twitter_username {
+                Some(twitter) => format!("Twitter: {},", twitter),
+                None => String::new(),
+            };
 
-                        let company_str = match &user.company {
-                            Some(company) => format!("Company: {},", company),
-                            None => String::new(),
-                        };
+            let bio_str = match &user.bio {
+                Some(bio) if bio.is_empty() => String::new(),
+                Some(bio) => format!("Bio: {},", bio),
+                None => String::new(),
+            };
 
-                        let location_str = match &user.location {
-                            Some(location) => format!("Location: {},", location),
-                            None => String::new(),
-                        };
+            let company_str = match &user.company {
+                Some(company) => format!("Company: {},", company),
+                None => String::new(),
+            };
 
-                        let date_str = match &user.created_at {
-                            Some(date) => {
-                                format!("Created At: {},", date.date_naive().to_string())
-                            }
-                            None => String::new(),
-                        };
+            let location_str = match &user.location {
+                Some(location) => format!("Location: {},", location),
+                None => String::new(),
+            };
 
-                        let email_str = match &user.email {
-                            Some(email) => format!("Email: {}", email),
-                            None => String::new(),
-                        };
-
-                        out.push_str(
-                                &format!(
-                                    "{name_str} {login_str} {url_str} {twitter_str} {bio_str} {company_str} {location_str} {date_str} {email_str}\n"
-                                )
-                            );
-                    }
+            let date_str = match &user.created_at {
+                Some(date) => {
+                    format!("Created At: {},", date.date_naive().to_string())
                 }
-            }
-        },
+                None => String::new(),
+            };
+
+            let email_str = match &user.email {
+                Some(email) => format!("Email: {}", email),
+                None => String::new(),
+            };
+
+            out.push_str(
+                &format!(
+                    "{name_str} {login_str} {url_str} {twitter_str} {bio_str} {company_str} {location_str} {date_str} {email_str}\n"
+                )
+            );
+        }
     }
 
-    Some(out)
+    Ok(out)
 }
-pub async fn get_community_profile_data(
-    github_token: &str,
-    owner: &str,
-    repo: &str,
-) -> Option<String> {
+
+pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<String> {
     #[derive(Deserialize, Debug)]
     struct CommunityProfile {
         description: String,
@@ -199,12 +183,7 @@ pub async fn get_community_profile_data(
     }
     None
 }
-pub async fn is_code_contributor(
-    github_token: &str,
-    owner: &str,
-    repo: &str,
-    user_name: &str,
-) -> bool {
+pub async fn is_code_contributor(owner: &str, repo: &str, user_name: &str) -> bool {
     use std::hash::Hasher;
     use twox_hash::XxHash;
     let repo_string = format!("{owner}/{repo}");
@@ -216,8 +195,8 @@ pub async fn is_code_contributor(
         .and_then(|val| serde_json::from_value::<std::collections::HashSet<String>>(val).ok())
     {
         Some(set) => set.contains(user_name),
-        None => match get_contributors(github_token, owner, repo).await {
-            Some(contributors) => {
+        None => match get_contributors(owner, repo).await {
+            Ok(contributors) => {
                 set(
                     key,
                     serde_json::to_value(contributors.clone()).unwrap_or_default(),
@@ -225,62 +204,53 @@ pub async fn is_code_contributor(
                 );
                 return contributors.contains(&user_name.to_owned());
             }
-            None => {
-                log::error!("Github contributors not found.");
+            Err(_e) => {
+                log::error!("Github contributors not found: {:?}", _e);
                 return false;
             }
         },
     }
 }
 
-pub async fn get_contributors(github_token: &str, owner: &str, repo: &str) -> Option<Vec<String>> {
+pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
+    use octocrab::Page;
+
     #[derive(Debug, Deserialize)]
     struct GithubUser {
         login: String,
     }
-    #[non_exhaustive]
-    #[derive(Clone, Debug)]
-    pub struct Page<T> {
-        pub items: Vec<T>,
-        pub incomplete_results: Option<bool>,
-        pub total_count: Option<u64>,
-        pub next: Option<Uri>,
-        pub prev: Option<Uri>,
-        pub first: Option<Uri>,
-        pub last: Option<Uri>,
-    }
 
-    // let url = format!(
-    //     "https://api.github.com/repos/{}/{}/contributors?per_page=100",
-    //     owner, repo
-    // );
-    let mut contributors = Vec::new();
-
-    let octocrab = get_octo(&GithubLogin::Default);
     let route = format!("repos/{owner}/{repo}/contributors?per_page=100");
+    let absolute_next_url = format!("https://api.github.com/{}", &route);
+    let mut contributors = Vec::new();
+    let octocrab = get_octo(&GithubLogin::Default);
+
     let mut page = octocrab
         .get::<Page<GithubUser>, _, ()>(&route, None::<&()>)
-        .await
-        .ok();
+        .await?;
 
-    while let Some(current_page) = page {
-        for user in &current_page.items {
+    // <https://api.github.com/repositories/224908244/contributors?per_page=2&page=2>; rel="next", <https://api.github.com/repositories/224908244/contributors?per_page=2&page=79>; rel="last"
+
+    while let Some(next_url) = page.next {
+        for user in &page.items {
             contributors.push(user.login.clone());
         }
 
-        match octocrab
-            .get_page::<Page<GithubUser>>(&current_page.next)
-            .await
-        {
-            Ok(next_page) => page = next_page,
-            Err(_) => break,
-        }
+        page = match octocrab.get_page::<GithubUser>(&Some(next_url)).await {
+            Ok(Some(next_page)) => next_page,
+            Ok(None) => break,       // No more pages
+            Err(e) => return Err(e), // Propagate errors
+        };
     }
 
-    Some(contributors)
+    for user in page.items {
+        contributors.push(user.login.clone());
+    }
+
+    Ok(contributors)
 }
 
-pub async fn get_readme(github_token: &str, owner: &str, repo: &str) -> Option<String> {
+pub async fn get_readme(owner: &str, repo: &str) -> Option<String> {
     #[derive(Deserialize, Debug)]
     struct GithubReadme {
         content: Option<String>,
@@ -323,7 +293,7 @@ pub async fn get_readme(github_token: &str, owner: &str, repo: &str) -> Option<S
         }
     }
 }
-pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Option<String> {
+pub async fn get_readme_owner_repo(about_repo: &str) -> Option<String> {
     #[derive(Deserialize, Debug)]
     struct GithubReadme {
         content: Option<String>,
@@ -367,7 +337,6 @@ pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Opti
     }
 }
 pub async fn get_issues_in_range(
-    github_token: &str,
     owner: &str,
     repo: &str,
     user_name: Option<String>,
@@ -415,7 +384,7 @@ pub async fn get_issues_in_range(
     Some((count, issue_vec))
 }
 
-pub async fn get_issue_texts(github_token: &str, issue: &Issue) -> Option<String> {
+pub async fn get_issue_texts(issue: &Issue) -> Option<String> {
     let issue_creator_name = &issue.user.login;
     let issue_title = &issue.title;
     let issue_body = match &issue.body {
@@ -480,7 +449,6 @@ pub async fn get_issue_texts(github_token: &str, issue: &Issue) -> Option<String
 }
 
 pub async fn get_commits_in_range(
-    github_token: &str,
     owner: &str,
     repo: &str,
     user_name: Option<String>,
@@ -571,11 +539,7 @@ pub async fn get_commits_in_range(
     Some((count, git_memory_vec, weekly_git_memory_vec))
 }
 
-pub async fn get_user_repos_in_language(
-    github_token: &str,
-    user: &str,
-    language: &str,
-) -> Option<Vec<Repository>> {
+pub async fn get_user_repos_in_language(user: &str, language: &str) -> Option<Vec<Repository>> {
     #[derive(Debug, Deserialize)]
     struct Page<T> {
         pub items: Vec<T>,
@@ -631,11 +595,7 @@ pub async fn get_user_repos_in_language(
     }
 }
 
-pub async fn get_user_repos_gql(
-    github_token: &str,
-    user_name: &str,
-    language: &str,
-) -> Option<String> {
+pub async fn get_user_repos_gql(user_name: &str, language: &str) -> Option<String> {
     #[derive(Debug, Deserialize)]
     struct Root {
         data: Data,
@@ -709,48 +669,45 @@ pub async fn get_user_repos_gql(
         user_name, language
     );
 
-    let base_url = "https://api.github.com/graphql";
+    let octocrab = get_octo(&GithubLogin::Default);
     let mut out = format!("Repos in {language}:\n");
-    match github_http_post(&github_token, base_url, &query).await {
-        None => log::error!("Failed to send the request to {}", base_url.to_string()),
-        Some(response) => match serde_json::from_slice::<Root>(response.as_slice()) {
-            Err(e) => log::error!("Failed to parse the response: {}", e),
-            Ok(repos) => {
-                let mut repos_sorted: Vec<&Node> = repos.data.search.nodes.iter().collect();
-                repos_sorted
-                    .sort_by(|a, b| b.stargazers.total_count.cmp(&a.stargazers.total_count));
 
-                for repo in repos_sorted {
-                    let name_str = format!("Repo: {}", repo.name);
+    match octocrab.graphql::<Root>(&query).await {
+        Err(e) => log::error!("Failed to parse the response: {}", e),
+        Ok(repos) => {
+            let mut repos_sorted: Vec<&Node> = repos.data.search.nodes.iter().collect();
+            repos_sorted.sort_by(|a, b| b.stargazers.total_count.cmp(&a.stargazers.total_count));
 
-                    let description_str = match &repo.description {
-                        Some(description) => format!("Description: {},", description),
-                        None => String::new(),
-                    };
+            for repo in repos_sorted {
+                let name_str = format!("Repo: {}", repo.name);
 
-                    let stars_str = match repo.stargazers.total_count {
-                        0 => String::new(),
-                        count => format!("Stars: {count}"),
-                    };
+                let description_str = match &repo.description {
+                    Some(description) => format!("Description: {},", description),
+                    None => String::new(),
+                };
 
-                    let commits_str = format!(
-                        "Commits: {}",
-                        repo.default_branch_ref.target.history.total_count
-                    );
+                let stars_str = match repo.stargazers.total_count {
+                    0 => String::new(),
+                    count => format!("Stars: {count}"),
+                };
 
-                    let temp = format!("{name_str} {description_str} {stars_str} {commits_str}\n");
+                let commits_str = format!(
+                    "Commits: {}",
+                    repo.default_branch_ref.target.history.total_count
+                );
 
-                    out.push_str(&temp);
-                }
+                let temp = format!("{name_str} {description_str} {stars_str} {commits_str}\n");
 
-                log::info!("Found {} repositories", repos.data.search.nodes.len());
+                out.push_str(&temp);
             }
-        },
+
+            log::info!("Found {} repositories", repos.data.search.nodes.len());
+        }
     }
     Some(out)
 }
 
-pub async fn search_issue(github_token: &str, search_query: &str) -> Option<String> {
+pub async fn search_issue(search_query: &str) -> anyhow::Result<String> {
     #[derive(Debug, Deserialize, Clone)]
     pub struct User {
         login: Option<String>,
@@ -813,16 +770,16 @@ pub async fn search_issue(github_token: &str, search_query: &str) -> Option<Stri
         data: Option<IssueSearch>,
     }
 
-    let base_url = "https://api.github.com/graphql";
     let mut out = String::from("ISSUES \n");
 
-    let mut cursor = None;
+    let mut cursor: Option<String> = None;
+    let mut has_next_page = true;
 
     loop {
         let query = format!(
             r#"
             query {{
-                search(query: "{search_query}", type: ISSUE, first: 100{after}) {{
+                search(query: "{}", type: ISSUE, first: 100{}) {{
                     edges {{
                         node {{
                             ... on Issue {{
@@ -854,154 +811,133 @@ pub async fn search_issue(github_token: &str, search_query: &str) -> Option<Stri
                 }}
             }}
             "#,
-            search_query = search_query,
-            after = cursor
+            search_query,
+            cursor
                 .as_ref()
                 .map_or(String::new(), |c| format!(r#", after: "{}""#, c))
         );
 
-        match github_http_post(&github_token, base_url, &query).await {
-            None => {
-                log::error!("Failed to send the request: {}", base_url);
-                break;
-            }
-            Some(response) => match serde_json::from_slice::<IssueRoot>(response.as_slice()) {
-                Err(e) => {
-                    log::error!("Failed to parse the response: {}", e);
-                    break;
-                }
-                Ok(results) => {
-                    if let Some(search) = &results.data.as_ref().and_then(|d| d.search.as_ref()) {
-                        if let Some(edges) = &search.edges {
-                            for edge in edges.iter().filter_map(|e| e.as_ref()) {
-                                if let Some(issue) = &edge.node {
-                                    let date = match issue.created_at {
-                                        Some(date) => date.date_naive().to_string(),
-                                        None => {
-                                            continue;
-                                        }
-                                    };
-                                    let title_str = match &issue.title {
-                                        Some(title) => format!("Title: {},", title),
-                                        None => String::new(),
-                                    };
-                                    let url_str = match &issue.url {
-                                        Some(u) => format!("Url: {}", u),
-                                        None => String::new(),
-                                    };
+        let octocrab = get_octo(&GithubLogin::Default);
+        let response: IssueRoot = octocrab.graphql(&query).await?;
 
-                                    let author_str =
-                                        match issue.clone().author.and_then(|a| a.login) {
-                                            Some(auth) => format!("Author: {},", auth),
-                                            None => String::new(),
-                                        };
-
-                                    let assignees_str = {
-                                        let assignee_names = issue
-                                            .assignees
-                                            .as_ref()
-                                            .and_then(|e| e.edges.as_ref())
-                                            .map_or(Vec::new(), |assignee_edges| {
-                                                assignee_edges
-                                                    .iter()
-                                                    .filter_map(|edge| {
-                                                        edge.as_ref().and_then(|actual_edge| {
-                                                            actual_edge.node.as_ref().and_then(
-                                                                |user| {
-                                                                    user.login.as_ref().map(
-                                                                        |login_str| {
-                                                                            login_str.as_str()
-                                                                        },
-                                                                    )
-                                                                },
-                                                            )
-                                                        })
-                                                    })
-                                                    .collect::<Vec<&str>>()
-                                            });
-
-                                        if !assignee_names.is_empty() {
-                                            format!("Assignees: {},", assignee_names.join(", "))
-                                        } else {
-                                            String::new()
-                                        }
-                                    };
-
-                                    let state_str = match &issue.state {
-                                        Some(s) => format!("State: {},", s),
-                                        None => String::new(),
-                                    };
-
-                                    let body_str = match &issue.body {
-                                        Some(body_text) if body_text.len() > 180 => {
-                                            let truncated_body = body_text
-                                                .chars()
-                                                .take(100)
-                                                .chain(
-                                                    body_text
-                                                        .chars()
-                                                        .skip(body_text.chars().count() - 80),
-                                                )
-                                                .collect::<String>();
-
-                                            format!("Body: {}", truncated_body)
-                                        }
-                                        Some(body_text) => format!("Body: {},", body_text),
-                                        None => String::new(),
-                                    };
-
-                                    let assoc_str = match &issue.author_association {
-                                        Some(association) => {
-                                            format!("Author Association: {}", association)
-                                        }
-                                        None => String::new(),
-                                    };
-
-                                    let temp = format!(
-                                            "{title_str} {url_str} Created At: {date} {author_str} {assignees_str}  {state_str} {body_str} {assoc_str}"
-                                        );
-
-                                    out.push_str(&temp);
-                                    out.push_str("\n");
-                                } else {
-                                    continue;
-                                }
+        if let Some(search) = response.data.as_ref().and_then(|d| d.search.as_ref()) {
+            if let Some(edges) = &search.edges {
+                for edge in edges.iter().filter_map(|e| e.as_ref()) {
+                    if let Some(issue) = &edge.node {
+                        let date = match issue.created_at {
+                            Some(date) => date.date_naive().to_string(),
+                            None => {
+                                continue;
                             }
-                        }
+                        };
+                        let title_str = match &issue.title {
+                            Some(title) => format!("Title: {},", title),
+                            None => String::new(),
+                        };
+                        let url_str = match &issue.url {
+                            Some(u) => format!("Url: {}", u),
+                            None => String::new(),
+                        };
 
-                        if let Some(page_info) = &search.page_info {
-                            if let Some(has_next_page) = page_info.has_next_page {
-                                if has_next_page {
-                                    match &page_info.end_cursor {
-                                        Some(end_cursor) => {
-                                            cursor = Some(end_cursor.clone());
-                                            log::info!(
-                                                    "Fetched a page, moving to next page with cursor: {}",
-                                                    end_cursor
-                                                );
-                                            continue;
-                                        }
-                                        None => {
-                                            log::error!(
-                                                    "Warning: hasNextPage is true, but endCursor is None. This might result in missing data."
-                                                );
-                                            break;
-                                        }
-                                    }
-                                }
+                        let author_str = match issue.clone().author.and_then(|a| a.login) {
+                            Some(auth) => format!("Author: {},", auth),
+                            None => String::new(),
+                        };
+
+                        let assignees_str = {
+                            let assignee_names = issue
+                                .assignees
+                                .as_ref()
+                                .and_then(|e| e.edges.as_ref())
+                                .map_or(Vec::new(), |assignee_edges| {
+                                    assignee_edges
+                                        .iter()
+                                        .filter_map(|edge| {
+                                            edge.as_ref().and_then(|actual_edge| {
+                                                actual_edge.node.as_ref().and_then(|user| {
+                                                    user.login
+                                                        .as_ref()
+                                                        .map(|login_str| login_str.as_str())
+                                                })
+                                            })
+                                        })
+                                        .collect::<Vec<&str>>()
+                                });
+
+                            if !assignee_names.is_empty() {
+                                format!("Assignees: {},", assignee_names.join(", "))
+                            } else {
+                                String::new()
+                            }
+                        };
+
+                        let state_str = match &issue.state {
+                            Some(s) => format!("State: {},", s),
+                            None => String::new(),
+                        };
+
+                        let body_str = match &issue.body {
+                            Some(body_text) if body_text.len() > 180 => {
+                                let truncated_body = body_text
+                                    .chars()
+                                    .take(100)
+                                    .chain(body_text.chars().skip(body_text.chars().count() - 80))
+                                    .collect::<String>();
+
+                                format!("Body: {}", truncated_body)
+                            }
+                            Some(body_text) => format!("Body: {},", body_text),
+                            None => String::new(),
+                        };
+
+                        let assoc_str = match &issue.author_association {
+                            Some(association) => {
+                                format!("Author Association: {}", association)
+                            }
+                            None => String::new(),
+                        };
+
+                        let temp = format!(
+                                "{title_str} {url_str} Created At: {date} {author_str} {assignees_str}  {state_str} {body_str} {assoc_str}"
+                            );
+
+                        out.push_str(&temp);
+                        out.push_str("\n");
+                    } else {
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(page_info) = &search.page_info {
+                if let Some(has_next_page) = page_info.has_next_page {
+                    if has_next_page {
+                        match &page_info.end_cursor {
+                            Some(end_cursor) => {
+                                cursor = Some(end_cursor.clone());
+                                log::info!(
+                                    "Fetched a page, moving to next page with cursor: {}",
+                                    end_cursor
+                                );
+                                continue;
+                            }
+                            None => {
+                                log::error!(
+                                        "Warning: hasNextPage is true, but endCursor is None. This might result in missing data."
+                                    );
+                                break;
                             }
                         }
                     }
-                    break;
                 }
-            },
+            }
         }
     }
 
-    Some(out)
+    Ok(out)
 }
 
-pub async fn search_repository(github_token: &str, search_query: &str) -> Option<String> {
+pub async fn search_repository(search_query: &str) -> anyhow::Result<String> {
     #[derive(Debug, Deserialize)]
     struct Payload {
         data: Option<Data>,
@@ -1050,36 +986,37 @@ pub async fn search_repository(github_token: &str, search_query: &str) -> Option
         has_next_page: Option<bool>,
     }
 
-    let base_url = "https://api.github.com/graphql";
+    let octocrab = get_octo(&GithubLogin::Default);
     let mut out = String::from("REPOSITORY \n");
 
     let mut cursor: Option<String> = None;
+    let mut has_next_page = true;
 
-    loop {
+    while has_next_page {
         let query = format!(
             r#"
-                query {{
-                    search(query: "{search_query}", type: REPOSITORY, first: 100{after}) {{
-                        edges {{
-                            node {{
-                                ... on Repository {{
-                                    name
-                                    description
-                                    url
-                                    createdAt
-                                    stargazers {{
-                                      totalCount
-                                    }}
-                                    forkCount
+            query {{
+                search(query: "{search_query}", type: REPOSITORY, first: 100{after}) {{
+                    edges {{
+                        node {{
+                            ... on Repository {{
+                                name
+                                description
+                                url
+                                createdAt
+                                stargazers {{
+                                    totalCount
                                 }}
+                                forkCount
                             }}
                         }}
-                        pageInfo {{
-                            endCursor
-                            hasNextPage
-                        }}
+                    }}
+                    pageInfo {{
+                        endCursor
+                        hasNextPage
                     }}
                 }}
+            }}
             "#,
             search_query = search_query,
             after = cursor
@@ -1087,104 +1024,82 @@ pub async fn search_repository(github_token: &str, search_query: &str) -> Option
                 .map_or(String::new(), |c| format!(r#", after: "{}""#, c))
         );
 
-        match github_http_post(&github_token, base_url, &query).await {
-            None => {
-                log::error!(
-                    "Failed to send the request to get RepositoryRoot: {}",
-                    base_url
-                );
-                return None;
-            }
-            Some(response) => match serde_json::from_slice::<Payload>(response.as_slice()) {
-                Err(e) => {
-                    log::error!("Failed to parse the response for RepositoryRoot: {}", e);
-                    return None;
-                }
-                Ok(payload) => {
-                    if let Some(data) = &payload.data {
-                        if let Some(search) = &data.search {
-                            if let Some(edges) = &search.edges {
-                                for edge_option in edges {
-                                    if let Some(edge) = edge_option {
-                                        if let Some(repo) = &edge.node {
-                                            let date_str = match &repo.created_at {
-                                                Some(date) => date.date_naive().to_string(),
-                                                None => {
-                                                    continue;
-                                                }
-                                            };
+        let response: Payload = octocrab.graphql(&query).await?;
 
-                                            let name_str = match &repo.name {
-                                                Some(name) => format!("Name: {name},"),
-                                                None => String::new(),
-                                            };
-
-                                            let desc_str = match &repo.description {
-                                                Some(desc) if desc.len() > 300 => {
-                                                    let truncated_desc = desc
-                                                        .chars()
-                                                        .take(180)
-                                                        .chain(
-                                                            desc.chars()
-                                                                .skip(desc.chars().count() - 120),
-                                                        )
-                                                        .collect::<String>();
-
-                                                    format!("Description: {truncated_desc}")
-                                                }
-                                                Some(desc) => format!("Description: {desc},"),
-                                                None => String::new(),
-                                            };
-
-                                            let url_str = match &repo.url {
-                                                Some(url) => format!("Url: {url}"),
-                                                None => String::new(),
-                                            };
-
-                                            let stars_str = match &repo.stargazers {
-                                                Some(sg) => format!(
-                                                    "Stars: {},",
-                                                    sg.total_count.unwrap_or(0)
-                                                ),
-                                                None => String::new(),
-                                            };
-
-                                            let forks_str = match &repo.fork_count {
-                                                Some(fork_count) => format!("Forks: {fork_count}"),
-                                                None => String::new(),
-                                            };
-
-                                            out.push_str(
-                                                    &format!(
-                                                        "{name_str} {desc_str} {url_str} Created At: {date_str} {stars_str} {forks_str}\n"
-                                                    )
-                                                );
-                                        }
+        if let Some(data) = &response.data {
+            if let Some(search) = &data.search {
+                if let Some(edges) = &search.edges {
+                    for edge_option in edges {
+                        if let Some(edge) = edge_option {
+                            if let Some(repo) = &edge.node {
+                                let date_str = match &repo.created_at {
+                                    Some(date) => date.date_naive().to_string(),
+                                    None => {
+                                        continue;
                                     }
-                                }
-                            }
-                            if let Some(page_info) = &search.page_info {
-                                if page_info.has_next_page.unwrap_or(false) {
-                                    cursor = page_info.end_cursor.clone();
-                                } else {
-                                    break;
-                                }
+                                };
+
+                                let name_str = match &repo.name {
+                                    Some(name) => format!("Name: {name},"),
+                                    None => String::new(),
+                                };
+
+                                let desc_str = match &repo.description {
+                                    Some(desc) if desc.len() > 300 => {
+                                        let truncated_desc = desc
+                                            .chars()
+                                            .take(180)
+                                            .chain(desc.chars().skip(desc.chars().count() - 120))
+                                            .collect::<String>();
+
+                                        format!("Description: {truncated_desc}")
+                                    }
+                                    Some(desc) => format!("Description: {desc},"),
+                                    None => String::new(),
+                                };
+
+                                let url_str = match &repo.url {
+                                    Some(url) => format!("Url: {url}"),
+                                    None => String::new(),
+                                };
+
+                                let stars_str = match &repo.stargazers {
+                                    Some(sg) => format!("Stars: {},", sg.total_count.unwrap_or(0)),
+                                    None => String::new(),
+                                };
+
+                                let forks_str = match &repo.fork_count {
+                                    Some(fork_count) => format!("Forks: {fork_count}"),
+                                    None => String::new(),
+                                };
+
+                                out.push_str(
+                                        &format!(
+                                            "{name_str} {desc_str} {url_str} Created At: {date_str} {stars_str} {forks_str}\n"
+                                        )
+                                    );
                             }
                         }
                     }
                 }
-            },
+                if let Some(page_info) = &search.page_info {
+                    if page_info.has_next_page.unwrap_or(false) {
+                        cursor = page_info.end_cursor.clone();
+                    } else {
+                        break;
+                    }
+                }
+            }
         };
     }
 
-    Some(out)
+    Ok(out)
 }
 
 pub async fn search_discussions_integrated(
-    github_token: &str,
     search_query: &str,
     target_person: &Option<String>,
-) -> Option<(String, Vec<GitMemory>)> {
+) -> anyhow::Result<(String, Vec<GitMemory>)> {
     #[derive(Debug, Deserialize)]
     struct DiscussionRoot {
         data: Option<Data>,
@@ -1242,8 +1157,6 @@ pub async fn search_discussions_integrated(
 
     let openai = OpenAIFlows::new();
 
-    let base_url = "https://api.github.com/graphql";
-
     let query = format!(
         r#"
         query {{
@@ -1281,149 +1194,137 @@ pub async fn search_discussions_integrated(
     let mut git_mem_vec = Vec::with_capacity(100);
     let mut text_out = String::from("DISCUSSIONS \n");
 
-    match github_http_post(&github_token, base_url, &query).await {
-        None => {
-            log::error!(
-                "Failed to send the request to get DiscussionRoot: {}",
-                base_url
-            );
-            return None;
-        }
-        Some(response) => match serde_json::from_slice::<DiscussionRoot>(&response) {
-            Err(e) => {
-                log::error!("Failed to parse the response for DiscussionRoot: {}", e);
-                return None;
-            }
-            Ok(results) => {
-                let empty_str = "".to_string();
+    let octocrab = get_octo(&GithubLogin::Default);
+    let response: DiscussionRoot = octocrab.graphql(&query).await?;
+    let empty_str = "".to_string();
 
-                if let Some(search) = results.data?.search {
-                    for edge_option in search.edges?.iter().filter_map(|e| e.as_ref()) {
-                        if let Some(discussion) = &edge_option.node {
-                            let date = discussion.created_at.date_naive();
-                            let title = discussion.title.as_ref().unwrap_or(&empty_str).to_string();
-                            let url = discussion.url.as_ref().unwrap_or(&empty_str).to_string();
-                            let source_url = discussion
-                                .html_url
-                                .as_ref()
-                                .unwrap_or(&empty_str)
-                                .to_string();
-                            let author_login = discussion
-                                .author
-                                .as_ref()
-                                .and_then(|a| a.login.as_ref())
-                                .unwrap_or(&empty_str)
-                                .to_string();
+    if let Some(search) = response
+        .data
+        .ok_or_else(|| anyhow::Error::msg("Missing data in the response"))?
+        .search
+    {
+        for edge_option in search
+            .edges
+            .ok_or_else(|| anyhow::Error::msg("Missing edges in the response"))?
+            .iter()
+            .filter_map(|e| e.as_ref())
+        {
+            if let Some(discussion) = &edge_option.node {
+                let date = discussion.created_at.date_naive();
+                let title = discussion.title.as_ref().unwrap_or(&empty_str).to_string();
+                let url = discussion.url.as_ref().unwrap_or(&empty_str).to_string();
+                let source_url = discussion
+                    .html_url
+                    .as_ref()
+                    .unwrap_or(&empty_str)
+                    .to_string();
+                let author_login = discussion
+                    .author
+                    .as_ref()
+                    .and_then(|a| a.login.as_ref())
+                    .unwrap_or(&empty_str)
+                    .to_string();
 
-                            let upvotes_str = match discussion.upvote_count {
-                                Some(c) if c > 0 => format!("Upvotes: {}", c),
-                                _ => "".to_string(),
-                            };
-                            let body_text = match discussion.body.as_ref() {
-                                Some(text) => squeeze_fit_remove_quoted(&text, 500, 0.6),
-                                None => "".to_string(),
-                            };
-                            let mut disuccsion_texts = format!(
-                                "Title: '{}' Url: '{}' Body: '{}' Created At: {} {} Author: {}\n",
-                                title, url, body_text, date, upvotes_str, author_login
-                            );
+                let upvotes_str = match discussion.upvote_count {
+                    Some(c) if c > 0 => format!("Upvotes: {}", c),
+                    _ => "".to_string(),
+                };
+                let body_text = match discussion.body.as_ref() {
+                    Some(text) => squeeze_fit_remove_quoted(&text, 500, 0.6),
+                    None => "".to_string(),
+                };
+                let mut disuccsion_texts = format!(
+                    "Title: '{}' Url: '{}' Body: '{}' Created At: {} {} Author: {}\n",
+                    title, url, body_text, date, upvotes_str, author_login
+                );
 
-                            if let Some(comments) = &discussion.comments {
-                                if let Some(ref edges) = comments.edges {
-                                    for comment_edge_option in
-                                        edges.iter().filter_map(|e| e.as_ref())
-                                    {
-                                        if let Some(comment) = &comment_edge_option.node {
-                                            let stripped_comment_text = squeeze_fit_remove_quoted(
-                                                &comment.body.as_ref().unwrap_or(&empty_str),
-                                                300,
-                                                0.6,
-                                            );
-                                            let comment_author = comment
-                                                .author
-                                                .as_ref()
-                                                .and_then(|a| a.login.as_ref())
-                                                .unwrap_or(&empty_str);
-                                            disuccsion_texts.push_str(
-                                                &(format!(
-                                                    "{comment_author} comments: '{stripped_comment_text}'\n")),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                            let disuccsion_texts =
-                                squeeze_fit_post_texts(&disuccsion_texts, 12_000, 0.4);
-
-                            let target_str = match &target_person {
-                                Some(person) => format!("{}'s", person),
-                                None => "key participants'".to_string(),
-                            };
-
-                            let sys_prompt_1 = &format!(
-                                    "Analyze the provided GitHub discussion. Identify the main topic, actions by participants, crucial viewpoints, solutions or consensus reached, and particularly highlight the contributions of specific individuals, especially '{target_str}'. Summarize without being verbose."
+                if let Some(comments) = &discussion.comments {
+                    if let Some(ref edges) = comments.edges {
+                        for comment_edge_option in edges.iter().filter_map(|e| e.as_ref()) {
+                            if let Some(comment) = &comment_edge_option.node {
+                                let stripped_comment_text = squeeze_fit_remove_quoted(
+                                    &comment.body.as_ref().unwrap_or(&empty_str),
+                                    300,
+                                    0.6,
                                 );
-
-                            let co = match disuccsion_texts.len() > 12000 {
-                                true => ChatOptions {
-                                    model: chat::ChatModel::GPT35Turbo16K,
-                                    system_prompt: Some(sys_prompt_1),
-                                    restart: true,
-                                    temperature: Some(0.7),
-                                    max_tokens: Some(256),
-                                    ..Default::default()
-                                },
-                                false => ChatOptions {
-                                    model: chat::ChatModel::GPT35Turbo,
-                                    system_prompt: Some(sys_prompt_1),
-                                    restart: true,
-                                    temperature: Some(0.7),
-                                    max_tokens: Some(192),
-                                    ..Default::default()
-                                },
-                            };
-
-                            let usr_prompt_1 = &format!(
-                                    "Analyze the content: {disuccsion_texts}. Briefly summarize the central topic, participants' actions, primary viewpoints, and outcomes. Emphasize the role of '{target_str}' in driving the discussion or reaching a resolution. Aim for a succinct summary that is rich in analysis and under 192 tokens."
+                                let comment_author = comment
+                                    .author
+                                    .as_ref()
+                                    .and_then(|a| a.login.as_ref())
+                                    .unwrap_or(&empty_str);
+                                disuccsion_texts.push_str(
+                                    &(format!(
+                                        "{comment_author} comments: '{stripped_comment_text}'\n"
+                                    )),
                                 );
-
-                            match openai
-                                .chat_completion("discussion99", usr_prompt_1, &co)
-                                .await
-                            {
-                                Ok(r) => {
-                                    text_out.push_str(&(format!("{} {}", url, r.choice)));
-                                    git_mem_vec.push(GitMemory {
-                                        memory_type: MemoryType::Discussion,
-                                        name: author_login,
-                                        tag_line: title,
-                                        source_url: source_url,
-                                        payload: r.choice,
-                                        date: date,
-                                    });
-                                }
-
-                                Err(_e) => log::error!(
-                                    "Error generating discussion summary #{}: {}",
-                                    url,
-                                    _e
-                                ),
                             }
                         }
                     }
                 }
+                let disuccsion_texts = squeeze_fit_post_texts(&disuccsion_texts, 12_000, 0.4);
+
+                let target_str = match &target_person {
+                    Some(person) => format!("{}'s", person),
+                    None => "key participants'".to_string(),
+                };
+
+                let sys_prompt_1 = &format!(
+                            "Analyze the provided GitHub discussion. Identify the main topic, actions by participants, crucial viewpoints, solutions or consensus reached, and particularly highlight the contributions of specific individuals, especially '{target_str}'. Summarize without being verbose."
+                        );
+
+                let co = match disuccsion_texts.len() > 12000 {
+                    true => ChatOptions {
+                        model: chat::ChatModel::GPT35Turbo16K,
+                        system_prompt: Some(sys_prompt_1),
+                        restart: true,
+                        temperature: Some(0.7),
+                        max_tokens: Some(256),
+                        ..Default::default()
+                    },
+                    false => ChatOptions {
+                        model: chat::ChatModel::GPT35Turbo,
+                        system_prompt: Some(sys_prompt_1),
+                        restart: true,
+                        temperature: Some(0.7),
+                        max_tokens: Some(192),
+                        ..Default::default()
+                    },
+                };
+
+                let usr_prompt_1 = &format!(
+                            "Analyze the content: {disuccsion_texts}. Briefly summarize the central topic, participants' actions, primary viewpoints, and outcomes. Emphasize the role of '{target_str}' in driving the discussion or reaching a resolution. Aim for a succinct summary that is rich in analysis and under 192 tokens."
+                        );
+
+                match openai
+                    .chat_completion("discussion99", usr_prompt_1, &co)
+                    .await
+                {
+                    Ok(r) => {
+                        text_out.push_str(&(format!("{} {}", url, r.choice)));
+                        git_mem_vec.push(GitMemory {
+                            memory_type: MemoryType::Discussion,
+                            name: author_login,
+                            tag_line: title,
+                            source_url: source_url,
+                            payload: r.choice,
+                            date: date,
+                        });
+                    }
+
+                    Err(_e) => log::error!("Error generating discussion summary #{}: {}", url, _e),
+                }
             }
-        },
+        }
     }
 
     if git_mem_vec.is_empty() {
-        None
+        Err(anyhow::anyhow!("No results found.").into())
     } else {
-        Some((text_out, git_mem_vec))
+        Ok((text_out, git_mem_vec))
     }
 }
 
-pub async fn search_users(github_token: &str, search_query: &str) -> Option<String> {
+pub async fn search_users(search_query: &str) -> anyhow::Result<String> {
     #[derive(Debug, Deserialize)]
     struct User {
         name: Option<String>,
@@ -1459,8 +1360,8 @@ pub async fn search_users(github_token: &str, search_query: &str) -> Option<Stri
         data: Option<UserSearch>,
     }
 
-    let base_url = "https://api.github.com/graphql";
     let mut out = String::from("USERS: \n");
+    let octocrab = get_octo(&GithubLogin::Default);
 
     let query = format!(
         r#"
@@ -1487,86 +1388,71 @@ pub async fn search_users(github_token: &str, search_query: &str) -> Option<Stri
         search_query = search_query
     );
 
-    match github_http_post(&github_token, base_url, &query).await {
-        None => {
-            log::error!("Failed to send the request to get UserRoot: {}", base_url);
-            return None;
-        }
-        Some(res) => match serde_json::from_slice::<UserRoot>(res.as_slice()) {
-            Err(e) => {
-                log::error!("Failed to parse the response for UserRoot: {}", e);
-                return None;
-            }
-            Ok(results) => {
-                if let Some(search) = &results.data {
-                    if let Some(edges) = &search.search {
-                        for edge_option in edges.edges.as_ref().unwrap_or(&vec![]) {
-                            if let Some(edge) = edge_option {
-                                if let Some(user) = &edge.node {
-                                    let login_str = match &user.login {
-                                        Some(login) => format!("Login: {},", login),
-                                        None => {
-                                            continue;
-                                        }
-                                    };
-                                    let name_str = match &user.name {
-                                        Some(name) => format!("Name: {},", name),
-                                        None => String::new(),
-                                    };
+    let response: UserRoot = octocrab.graphql(&query).await?;
 
-                                    let url_str = match &user.url {
-                                        Some(url) => format!("Url: {},", url),
-                                        None => String::new(),
-                                    };
-
-                                    let twitter_str = match &user.twitter_username {
-                                        Some(twitter) => format!("Twitter: {},", twitter),
-                                        None => String::new(),
-                                    };
-
-                                    let bio_str = match &user.bio {
-                                        Some(bio) => format!("Bio: {},", bio),
-                                        None => String::new(),
-                                    };
-
-                                    let company_str = match &user.company {
-                                        Some(company) => format!("Company: {},", company),
-                                        None => String::new(),
-                                    };
-
-                                    let location_str = match &user.location {
-                                        Some(location) => format!("Location: {},", location),
-                                        None => String::new(),
-                                    };
-
-                                    let date_str = match &user.created_at {
-                                        Some(date) => {
-                                            format!(
-                                                "Created At: {},",
-                                                date.date_naive().to_string()
-                                            )
-                                        }
-                                        None => String::new(),
-                                    };
-
-                                    let email_str = match &user.email {
-                                        Some(email) => format!("Email: {}", email),
-                                        None => String::new(),
-                                    };
-
-                                    out.push_str(
-                                            &format!(
-                                                "{name_str} {login_str} {url_str} {twitter_str} {bio_str} {company_str} {location_str} {date_str} {email_str}\n"
-                                            )
-                                        );
-                                }
+    if let Some(search) = &response.data {
+        if let Some(edges) = &search.search {
+            for edge_option in edges.edges.as_ref().unwrap_or(&vec![]) {
+                if let Some(edge) = edge_option {
+                    if let Some(user) = &edge.node {
+                        let login_str = match &user.login {
+                            Some(login) => format!("Login: {},", login),
+                            None => {
+                                continue;
                             }
-                        }
+                        };
+                        let name_str = match &user.name {
+                            Some(name) => format!("Name: {},", name),
+                            None => String::new(),
+                        };
+
+                        let url_str = match &user.url {
+                            Some(url) => format!("Url: {},", url),
+                            None => String::new(),
+                        };
+
+                        let twitter_str = match &user.twitter_username {
+                            Some(twitter) => format!("Twitter: {},", twitter),
+                            None => String::new(),
+                        };
+
+                        let bio_str = match &user.bio {
+                            Some(bio) => format!("Bio: {},", bio),
+                            None => String::new(),
+                        };
+
+                        let company_str = match &user.company {
+                            Some(company) => format!("Company: {},", company),
+                            None => String::new(),
+                        };
+
+                        let location_str = match &user.location {
+                            Some(location) => format!("Location: {},", location),
+                            None => String::new(),
+                        };
+
+                        let date_str = match &user.created_at {
+                            Some(date) => {
+                                format!("Created At: {},", date.date_naive().to_string())
+                            }
+                            None => String::new(),
+                        };
+
+                        let email_str = match &user.email {
+                            Some(email) => format!("Email: {}", email),
+                            None => String::new(),
+                        };
+
+                        out.push_str(
+                                &format!(
+                                    "{name_str} {login_str} {url_str} {twitter_str} {bio_str} {company_str} {location_str} {date_str} {email_str}\n"
+                                )
+                            );
                     }
                 }
             }
-        },
+        }
     }
 
-    Some(out)
+    Ok(out)
 }

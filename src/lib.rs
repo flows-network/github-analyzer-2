@@ -1,6 +1,5 @@
 pub mod data_analyzers;
 pub mod github_data_fetchers;
-pub mod octocrab_compat;
 pub mod reports;
 pub mod utils;
 use data_analyzers::{
@@ -29,7 +28,7 @@ async fn handler(
     _qry: HashMap<String, Value>,
     _body: Vec<u8>,
 ) {
-    let github_token = env::var("github_token").expect("github_token was not present in env");
+    // let github_token = env::var("github_token").expect("github_token was not present in env");
     let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
 
     let user_login = _qry
@@ -39,8 +38,8 @@ async fn handler(
         .map(|n| n.to_string());
 
     if user_login.is_some() {
-        match get_user_data_by_login(&github_token, &user_login.clone().unwrap()).await {
-            Some(pro) => {
+        match get_user_data_by_login(&user_login.clone().unwrap()).await {
+            Ok(pro) => {
                 let query = &format!("github user {}", user_login.unwrap());
 
                 let search_data = search_bing(&Ocp_Apim_Subscription_Key, query)
@@ -62,7 +61,7 @@ async fn handler(
                     .to_vec(),
                 )
             }
-            None => send_response(
+            Err(_e) => send_response(
                 400,
                 vec![(String::from("content-type"), String::from("text/plain"))],
                 "failed to find user with such login.".as_bytes().to_vec(),
@@ -77,7 +76,7 @@ async fn handler(
         .map(|n| n.to_string());
 
     if let Some(about_repo) = about_repo {
-        match get_repo_overview_by_scraper(&github_token, &about_repo).await {
+        match get_repo_overview_by_scraper( &about_repo).await {
             None => {
                 send_response(
                     400,

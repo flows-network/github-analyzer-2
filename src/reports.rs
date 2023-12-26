@@ -6,15 +6,12 @@ use log;
 use webhook_flows::send_response;
 
 pub async fn search_user(github_token: &str, user_login: &str) -> Option<String> {
-    let _profile_data = get_user_data_by_login(github_token, user_login).await;
+    get_user_data_by_login(user_login).await.ok()
 
-    // let repos = get_user_repos_gql(github_token, user).await;
-
-    _profile_data
+    // let repos = get_user_repos_gql( user).await;
 }
 
 pub async fn weekly_report(
-    github_token: String,
     owner: &str,
     repo: &str,
     user_name: Option<String>,
@@ -25,7 +22,7 @@ pub async fn weekly_report(
 
     let mut _profile_data = String::new();
 
-    match is_valid_owner_repo_integrated(&github_token, owner, repo).await {
+    match is_valid_owner_repo_integrated( owner, repo).await {
         None => {
             send_response(
                 400,
@@ -46,7 +43,15 @@ pub async fn weekly_report(
 
     let mut commits_summaries = String::new();
     'commits_block: {
-        match get_commits_in_range(&github_token, owner, repo, user_name.clone(), n_days, token.clone()).await {
+        match get_commits_in_range(
+            owner,
+            repo,
+            user_name.clone(),
+            n_days,
+            token.clone(),
+        )
+        .await
+        {
             Some((count, mut commits_vec, weekly_commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
@@ -65,7 +70,15 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(&github_token, &mut commits_vec, _turbo, is_sparce, token.clone()).await {
+                match process_commits(
+                    
+                    &mut commits_vec,
+                    _turbo,
+                    is_sparce,
+                    token.clone(),
+                )
+                .await
+                {
                     Some(summary) => {
                         commits_summaries = summary;
                     }
@@ -89,11 +102,19 @@ pub async fn weekly_report(
     let mut issues_summaries = String::new();
 
     'issues_block: {
-        match get_issues_in_range(&github_token, owner, repo, user_name.clone(), n_days, token.clone()).await {
+        match get_issues_in_range(
+            owner,
+            repo,
+            user_name.clone(),
+            n_days,
+            token.clone(),
+        )
+        .await
+        {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
                     .iter()
-                    .map(|issue| issue.html_url.to_owned())
+                    .map(|issue| issue.html_url.to_string())
                     .collect::<Vec<String>>()
                     .join("\n");
 
@@ -111,7 +132,7 @@ pub async fn weekly_report(
                 };
                 issues_count = count;
                 match process_issues(
-                    &github_token,
+                    
                     issue_vec,
                     user_name.clone(),
                     _turbo,
@@ -143,8 +164,8 @@ pub async fn weekly_report(
     };
 
     let mut discussion_data = String::new();
-    match search_discussions_integrated(&github_token, &discussion_query, &user_name).await {
-        Some((summary, discussion_vec)) => {
+    match search_discussions_integrated( &discussion_query, &user_name).await {
+        Ok((summary, discussion_vec)) => {
             let count = discussion_vec.len();
             let discussions_str = discussion_vec
                 .iter()
@@ -158,7 +179,7 @@ pub async fn weekly_report(
             // send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }
-        None => log::error!("failed to get discussions for {owner}/{repo}"),
+        Err(_e) => log::error!("failed to get discussions for {owner}/{repo}: {_e}"),
     }
 
     let total_input_entry_count = (commits_count + issues_count) as u16;
@@ -191,7 +212,12 @@ pub async fn weekly_report(
                 report = vec!["no report generated".to_string()];
             }
             Some(final_summary) => {
-               slack_flows::send_message_to_channel("ik8", "ch_err", format!("{:?}", final_summary)).await;
+                slack_flows::send_message_to_channel(
+                    "ik8",
+                    "ch_err",
+                    format!("{:?}", final_summary),
+                )
+                .await;
 
                 let clean_summary = parse_summary_from_raw_json(&final_summary);
                 report.push(clean_summary);

@@ -1,10 +1,11 @@
-use std::fmt::format;
-
 use crate::github_data_fetchers::*;
-use crate::octocrab_compat::{Comment, Issue};
 use crate::utils::*;
 use chrono::{DateTime, Utc};
-use github_flows::{get_octo, octocrab, GithubLogin};
+use github_flows::{
+    get_octo,
+    octocrab:: models::{issues::Comment, issues::Issue},
+    octocrab, GithubLogin,
+};
 use log;
 use openai_flows::{
     self,
@@ -181,7 +182,7 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
     }
 }
 
-pub async fn get_repo_info(github_token: &str, about_repo: &str) -> Option<String> {
+pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -220,7 +221,7 @@ pub async fn get_repo_info(github_token: &str, about_repo: &str) -> Option<Strin
     }
 
     let mut payload = String::new();
-    match get_readme_owner_repo(github_token, about_repo).await {
+    match get_readme_owner_repo(about_repo).await {
         Some(content) => {
             let content = content.chars().take(20000).collect::<String>();
             match analyze_readme(&content).await {
@@ -240,7 +241,7 @@ pub async fn get_repo_info(github_token: &str, about_repo: &str) -> Option<Strin
         return Some(payload);
     }
 }
-pub async fn get_repo_overview_by_scraper(github_token: &str, about_repo: &str) -> Option<String> {
+pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
     let mut _openai = OpenAIFlows::new();
     _openai.set_retry_times(2);
     let repo_home_url = format!("https://github.com/{}", about_repo);
@@ -286,11 +287,7 @@ pub async fn get_repo_overview_by_scraper(github_token: &str, about_repo: &str) 
     }
 }
 
-pub async fn is_valid_owner_repo_integrated(
-    github_token: &str,
-    owner: &str,
-    repo: &str,
-) -> Option<GitMemory> {
+pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<GitMemory> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -329,7 +326,7 @@ pub async fn is_valid_owner_repo_integrated(
     }
 
     let mut payload = String::new();
-    match get_readme(github_token, owner, repo).await {
+    match get_readme(owner, repo).await {
         Some(content) => {
             let content = content.chars().take(20000).collect::<String>();
             match analyze_readme(&content).await {
@@ -360,7 +357,6 @@ pub async fn is_valid_owner_repo_integrated(
 }
 
 pub async fn process_issues(
-    github_token: &str,
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
     _turbo: bool,
@@ -372,7 +368,6 @@ pub async fn process_issues(
 
     for issue in &inp_vec {
         match analyze_issue_integrated(
-            github_token,
             issue,
             target_person.clone(),
             _turbo,
@@ -443,7 +438,6 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
 }
 
 pub async fn analyze_issue_integrated(
-    github_token: &str,
     issue: &Issue,
     target_person: Option<String>,
     _turbo: bool,
@@ -594,14 +588,13 @@ pub async fn analyze_issue_integrated(
 }
 
 pub async fn analyze_commit_integrated(
-    github_token: &str,
     user_name: &str,
     tag_line: &str,
     url: &str,
     _turbo: bool,
     is_sparce: bool,
     token: Option<String>,
-) -> Option<String> {
+) -> anyhow::Result<String> {
     let _openai = OpenAIFlows::new();
 
     let token_str = match token {
@@ -610,151 +603,138 @@ pub async fn analyze_commit_integrated(
     };
 
     let commit_patch_str = format!("{url}.patch{token_str}");
-    let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
-        .expect(&format!("Error generating URI from {:?}", commit_patch_str));
-    let mut writer = Vec::new();
-    match http_req::request::Request::new(&uri)
-        .method(http_req::request::Method::GET)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "plain/text")
-        .header("Authorization", &format!("Bearer {github_token}"))
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                log::error!("Github http error {:?}", res.status_code());
-                return None;
-            };
+    // let url = Url::try_from(commit_patch_str.as_str())
+    //     .expect(&format!("Error generating URI from {:?}", commit_patch_str));
 
-            let text = String::from_utf8_lossy(writer.as_slice());
-            // let mut stripped_texts = String::with_capacity(text.len());
+    let octocrab = get_octo(&GithubLogin::Default);
 
-            // 'commit_text_block: {
-            //     let lines_count = text.lines().count();
-            //     if lines_count > 150 {
-            //         stripped_texts = text
-            //             .splitn(2, "diff --git")
-            //             .nth(0)
-            //             .unwrap_or("")
-            //             .to_string();
-            //         break 'commit_text_block;
-            //     }
+    let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
+    let text: String = response.text().await?;
+    // let mut stripped_texts = String::with_capacity(text.len());
 
-            //     let mut inside_diff_block = false;
+    // 'commit_text_block: {
+    //     let lines_count = text.lines().count();
+    //     if lines_count > 150 {
+    //         stripped_texts = text
+    //             .splitn(2, "diff --git")
+    //             .nth(0)
+    //             .unwrap_or("")
+    //             .to_string();
+    //         break 'commit_text_block;
+    //     }
 
-            //     match is_sparce {
-            //         false => {
-            //             for line in text.lines() {
-            //                 if line.starts_with("diff --git") {
-            //                     inside_diff_block = true;
-            //                     stripped_texts.push_str(line);
-            //                     stripped_texts.push('\n');
-            //                     continue;
-            //                 }
+    //     let mut inside_diff_block = false;
 
-            //                 if inside_diff_block {
-            //                     if line
-            //                         .chars()
-            //                         .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-            //                     {
-            //                         continue;
-            //                     }
-            //                 }
+    //     match is_sparce {
+    //         false => {
+    //             for line in text.lines() {
+    //                 if line.starts_with("diff --git") {
+    //                     inside_diff_block = true;
+    //                     stripped_texts.push_str(line);
+    //                     stripped_texts.push('\n');
+    //                     continue;
+    //                 }
 
-            //                 stripped_texts.push_str(line);
-            //                 stripped_texts.push('\n');
+    //                 if inside_diff_block {
+    //                     if line
+    //                         .chars()
+    //                         .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
+    //                     {
+    //                         continue;
+    //                     }
+    //                 }
 
-            //                 if line.is_empty() {
-            //                     inside_diff_block = false;
-            //                 }
-            //             }
-            //         }
-            //         true => stripped_texts = text.to_string(),
-            //     }
-            // }
-            // slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
+    //                 stripped_texts.push_str(line);
+    //                 stripped_texts.push('\n');
 
-            let sys_prompt_1 = &format!(
+    //                 if line.is_empty() {
+    //                     inside_diff_block = false;
+    //                 }
+    //             }
+    //         }
+    //         true => stripped_texts = text.to_string(),
+    //     }
+    // }
+    // slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
+
+    let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
 
-            let mut co: ChatOptions = ChatOptions {
-                model: chat::ChatModel::GPT35Turbo,
-                system_prompt: Some(sys_prompt_1),
-                restart: true,
-                temperature: Some(0.7),
-                max_tokens: Some(128),
-                ..Default::default()
-            };
+    let mut co: ChatOptions = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo,
+        system_prompt: Some(sys_prompt_1),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(128),
+        ..Default::default()
+    };
 
-            let stripped_texts = if !is_sparce {
-                let stripped_texts = text
-                    .splitn(2, "diff --git")
-                    .nth(0)
-                    .unwrap_or("")
-                    .to_string();
+    let stripped_texts = if !is_sparce {
+        let stripped_texts = text
+            .splitn(2, "diff --git")
+            .nth(0)
+            .unwrap_or("")
+            .to_string();
 
-                let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-            } else {
-                co = ChatOptions {
-                    model: chat::ChatModel::GPT35Turbo16K,
-                    system_prompt: Some(sys_prompt_1),
-                    restart: true,
-                    temperature: Some(0.7),
-                    max_tokens: Some(128),
-                    ..Default::default()
-                };
-                text.chars().take(24_000).collect::<String>()
-            };
+        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+    } else {
+        co = ChatOptions {
+            model: chat::ChatModel::GPT35Turbo16K,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(128),
+            ..Default::default()
+        };
+        text.chars().take(24_000).collect::<String>()
+    };
 
-            // let stripped_texts = if turbo {
-            //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-            // } else {
-            //     if stripped_texts.len() > 12_000 {
-            //         co = ChatOptions {
-            //             model: chat::ChatModel::GPT35Turbo16K,
-            //             system_prompt: Some(sys_prompt_1),
-            //             restart: true,
-            //             temperature: Some(0.7),
-            //             max_tokens: Some(128),
-            //             ..Default::default()
-            //         };
-            //     }
-            //     squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
-            // };
+    // let stripped_texts = if turbo {
+    //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+    // } else {
+    //     if stripped_texts.len() > 12_000 {
+    //         co = ChatOptions {
+    //             model: chat::ChatModel::GPT35Turbo16K,
+    //             system_prompt: Some(sys_prompt_1),
+    //             restart: true,
+    //             temperature: Some(0.7),
+    //             max_tokens: Some(128),
+    //             ..Default::default()
+    //         };
+    //     }
+    //     squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
+    // };
 
-            let usr_prompt_1 = &format!(
+    let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
 
-            let sha_serial = match url.rsplitn(2, "/").nth(0) {
-                Some(s) => s.chars().take(5).collect::<String>(),
-                None => "0000".to_string(),
-            };
-            match _openai
-                .chat_completion(&format!("commit-{sha_serial}"), usr_prompt_1, &co)
-                .await
-            {
-                Ok(r) => {
-                    let out = format!("{} {}", url, r.choice);
-                    Some(out)
-                }
-                Err(_e) => {
-                    log::error!("Error generating issue summary #{}: {}", sha_serial, _e);
-                    None
-                }
-            }
+    let sha_serial = match url.rsplitn(2, "/").nth(0) {
+        Some(s) => s.chars().take(5).collect::<String>(),
+        None => "0000".to_string(),
+    };
+    match _openai
+        .chat_completion(&format!("commit-{sha_serial}"), usr_prompt_1, &co)
+        .await
+    {
+        Ok(r) => {
+            let out = format!("{} {}", url, r.choice);
+            Ok(out)
         }
         Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-            None
+            log::error!("Error generating issue summary #{}: {}", sha_serial, _e);
+            Err(anyhow::anyhow!(
+                "Error generating issue summary #{}: {}",
+                sha_serial,
+                _e
+            ))
         }
     }
 }
 
 pub async fn process_commits(
-    github_token: &str,
     inp_vec: &mut Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
@@ -765,7 +745,6 @@ pub async fn process_commits(
 
     for commit_obj in inp_vec.iter_mut() {
         match analyze_commit_integrated(
-            github_token,
             &commit_obj.name,
             &commit_obj.tag_line,
             &commit_obj.source_url,
@@ -775,7 +754,7 @@ pub async fn process_commits(
         )
         .await
         {
-            Some(summary) => {
+            Ok(summary) => {
                 let len = commits_summaries.split_whitespace().count();
                 if len > 3000 {
                     break;
@@ -784,11 +763,12 @@ pub async fn process_commits(
 
                 processed_count += 1;
             }
-            None => {
+            Err(_e) => {
                 log::error!(
-                    "Error analyzing commit {:?} for user {}",
+                    "Error analyzing commit {:?} for user {}: {:?}",
                     commit_obj.source_url,
-                    commit_obj.name
+                    commit_obj.name,
+                    _e
                 );
             }
         }

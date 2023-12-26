@@ -171,66 +171,6 @@ pub async fn chain_of_chat(
     None
 }
 
-pub fn github_fetch_with_header(
-    token: &str,
-    url: &str,
-) -> Result<(response::Response, Vec<u8>), Box<dyn std::error::Error>> {
-    let uri = Uri::try_from(url)?;
-    let mut writer = std::io::Cursor::new(Vec::new());
-
-    let response = match Request::new(&uri)
-        .method(Method::GET)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "application/vnd.github.v3+json")
-        .header("Authorization", &format!("Bearer {}", token))
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "github_fetch_with_header encountered Github http error",
-                )));
-            };
-            res
-        }
-        Err(e) => {
-            log::error!("Error getting response from Github: {:?}", e);
-            return Err(Box::new(e));
-        }
-    };
-
-    Ok((response, writer.into_inner()))
-}
-
-pub async fn github_http_post(token: &str, base_url: &str, query: &str) -> Option<Vec<u8>> {
-    let base_url = Uri::try_from(base_url).unwrap();
-    let mut writer = Vec::new();
-
-    let query = serde_json::json!({"query": query});
-    match Request::new(&base_url)
-        .method(Method::POST)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "application/json")
-        .header("Authorization", &format!("Bearer {}", token))
-        .header("Content-Length", &query.to_string().len())
-        .body(&query.to_string().into_bytes())
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                log::error!("Github http error {:?}", res.status_code());
-                return None;
-            };
-            Some(writer)
-        }
-        Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-            None
-        }
-    }
-}
-
 pub async fn save_user(owner: &str, repo: &str, user_name: &str) -> bool {
     use std::hash::Hasher;
     use twox_hash::XxHash;
