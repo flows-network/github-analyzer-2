@@ -69,7 +69,7 @@ async fn handler(
         }
         return;
     }
-    let about_repo = _qry
+/*     let about_repo = _qry
         .get("about_repo")
         .unwrap_or(&Value::Null)
         .as_str()
@@ -97,7 +97,7 @@ async fn handler(
             }
         }
         return;
-    }
+    } */
 
     let (owner, repo) = match (
         _qry.get("owner").unwrap_or(&Value::Null).as_str(),
