@@ -193,7 +193,7 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     let _openai = OpenAIFlows::new();
 
     let community_profile_url = format!(
-        "https://api.github.com/repos/{}/community/profile",
+        "repos/{}/community/profile",
         about_repo
     );
 
@@ -298,7 +298,7 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
     let _openai = OpenAIFlows::new();
 
     let community_profile_url = format!(
-        "https://api.github.com/repos/{}/{}/community/profile",
+        "/repos/{}/{}/community/profile",
         owner, repo
     );
 

@@ -37,7 +37,7 @@ pub enum MemoryType {
 }
 
 pub async fn get_user_profile(user: &str) -> Option<User> {
-    let user_profile_url = format!("https://api.github.com/users/{user}");
+    let user_profile_url = format!("users/{user}");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -168,7 +168,7 @@ pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<Strin
     }
 
     let community_profile_url =
-        format!("https://api.github.com/repos/{owner}/{repo}/community/profile");
+        format!("repos/{owner}/{repo}/community/profile");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -256,7 +256,7 @@ pub async fn get_readme(owner: &str, repo: &str) -> Option<String> {
         content: Option<String>,
     }
 
-    let readme_url = format!("https://api.github.com/repos/{owner}/{repo}/readme");
+    let readme_url = format!("repos/{owner}/{repo}/readme");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -299,7 +299,7 @@ pub async fn get_readme_owner_repo(about_repo: &str) -> Option<String> {
         content: Option<String>,
     }
 
-    let readme_url = format!("https://api.github.com/repos/{about_repo}/readme");
+    let readme_url = format!("repos/{about_repo}/readme");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -561,7 +561,7 @@ pub async fn get_user_repos_in_language(user: &str, language: &str) -> Option<Ve
 
     loop {
         let url_str = format!(
-            "https://api.github.com/search/repositories?q={}&page={}",
+            "search/repositories?q={}&page={}",
             encoded_query, current_page
         );
 
