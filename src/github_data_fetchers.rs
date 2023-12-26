@@ -1,9 +1,9 @@
-use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
-use github_flows::{get_octo, octocrab, GithubLogin};
 use crate::{reports, utils::*};
 use anyhow::anyhow;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derivative::Derivative;
+use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
+use github_flows::{get_octo, octocrab, GithubLogin};
 use http_req::response::{self, Response};
 use openai_flows::{
     self,
@@ -213,38 +213,38 @@ pub async fn is_code_contributor(owner: &str, repo: &str, user_name: &str) -> bo
 }
 
 pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
-    use octocrab::Page;
-
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Serialize)]
     struct GithubUser {
         login: String,
     }
-
-    let route = format!("repos/{owner}/{repo}/contributors?per_page=100");
-    let absolute_next_url = format!("https://api.github.com/{}", &route);
     let mut contributors = Vec::new();
     let octocrab = get_octo(&GithubLogin::Default);
+    'outer: for n in 1..50 {
+        log::info!("contributors loop {}", n);
 
-    let mut page = octocrab
-        .get::<Page<GithubUser>, _, ()>(&route, None::<&()>)
-        .await?;
+        let contributors_route =
+            format!("repos/{owner}/{repo}/contributors?per_page=100&page={n}",);
 
-    // <https://api.github.com/repositories/224908244/contributors?per_page=2&page=2>; rel="next", <https://api.github.com/repositories/224908244/contributors?per_page=2&page=79>; rel="last"
+        match octocrab
+            .get::<Vec<GithubUser>, _, ()>(&contributors_route, None::<&()>)
+            .await
+        {
+            Ok(user_vec) => {
+                if user_vec.is_empty() {
+                    break 'outer;
+                }
+                for user in &user_vec {
+                    contributors.push(user.login.clone());
+                    // log::info!("user: {}", user.login);
+                    // upload_airtable(&user.login, "email", "twitter_username", false).await;
+                }
+            }
 
-    while let Some(next_url) = page.next {
-        for user in &page.items {
-            contributors.push(user.login.clone());
+            Err(_e) => {
+                log::error!("looping stopped: {:?}", _e);
+                break 'outer;
+            }
         }
-
-        page = match octocrab.get_page::<GithubUser>(&Some(next_url)).await {
-            Ok(Some(next_page)) => next_page,
-            Ok(None) => break,       // No more pages
-            Err(e) => return Err(e), // Propagate errors
-        };
-    }
-
-    for user in page.items {
-        contributors.push(user.login.clone());
     }
 
     Ok(contributors)
@@ -362,9 +362,13 @@ pub async fn get_issues_in_range(
         Some(t) => format!("&token={}", t.as_str()),
     };
     let url_str = format!(
-        "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
+        "search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
         encoded_query
     );
+    // let url_str = format!(
+    //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
+    //     encoded_query
+    // );
 
     let mut issue_vec = vec![];
     let octocrab = get_octo(&GithubLogin::Default);
@@ -485,7 +489,9 @@ pub async fn get_commits_in_range(
         Some(t) => format!("&token={}", t.as_str()),
     };
     let base_commit_url =
-        format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+        format!("repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+    // let base_commit_url =
+    //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
 
     let mut git_memory_vec = vec![];
     let mut weekly_git_memory_vec = vec![];

@@ -26,7 +26,7 @@ async fn handler(
     _headers: Vec<(String, String)>,
     _subpath: String,
     _qry: HashMap<String, Value>,
-    _body: Vec<u8>,
+    _body: Vec<u8>
 ) {
     // let github_token = env::var("github_token").expect("github_token was not present in env");
     let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
@@ -76,7 +76,7 @@ async fn handler(
         .map(|n| n.to_string());
 
     if let Some(about_repo) = about_repo {
-        match get_repo_overview_by_scraper( &about_repo).await {
+        match get_repo_overview_by_scraper(&about_repo).await {
             None => {
                 send_response(
                     400,
@@ -127,12 +127,12 @@ async fn handler(
         .as_str()
         .map(|n| n.to_string());
 
-    let output = weekly_report(github_token, &owner, &repo, user_name, token.clone()).await;
+    let output = weekly_report( &owner, &repo, user_name, token.clone()).await;
 
     send_response(
         200,
         vec![(String::from("content-type"), String::from("text/plain"))],
         output.as_bytes().to_vec(),
     );
-    send_message_to_channel("ik8", "ch_err", output.clone()).await;
+    // send_message_to_channel("ik8", "ch_err", output.clone()).await;
 }
