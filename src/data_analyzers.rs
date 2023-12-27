@@ -289,22 +289,36 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
     struct CommunityProfile {
         health_percentage: u16,
         description: Option<String>,
-        readme: Option<FileDetails>,
         updated_at: Option<DateTime<Utc>>,
     }
-    #[derive(Debug, Deserialize)]
-    pub struct FileDetails {
-        url: Option<String>,
-        html_url: Option<String>,
+
+    let octocrab = get_octo(&GithubLogin::Default);
+
+    #[derive(Deserialize)]
+    struct RepositoryRoot {
+        id: u64,
+        full_name: String,
     }
+    let repo_url = format!("/repos/{}/{}/", owner, repo);
 
-    let _openai = OpenAIFlows::new();
-
-    let community_profile_url = format!("/repos/{}/{}/community/profile", owner, repo);
+    match octocrab
+        .get::<RepositoryRoot, _, ()>(&repo_url, None::<&()>)
+        .await
+    {
+        Ok(r) => {
+            if r.full_name != format!("{}/{}", owner, repo) {
+                return None;
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to locate the owner/repo: {:?}", e);
+            return None;
+        }
+    }
 
     let mut description = String::new();
     let mut date = Utc::now().date_naive();
-    let octocrab = get_octo(&GithubLogin::Default);
+    let community_profile_url = format!("/repos/{}/{}/community/profile", owner, repo);
 
     match octocrab
         .get::<CommunityProfile, _, ()>(&community_profile_url, None::<&()>)
