@@ -2,9 +2,9 @@ use crate::github_data_fetchers::*;
 use crate::utils::*;
 use chrono::{DateTime, Utc};
 use github_flows::{
-    get_octo,
-    octocrab:: models::{issues::Comment, issues::Issue},
-    octocrab, GithubLogin,
+    get_octo, octocrab,
+    octocrab::models::{issues::Comment, issues::Issue},
+    GithubLogin,
 };
 use log;
 use openai_flows::{
@@ -192,10 +192,7 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     }
     let _openai = OpenAIFlows::new();
 
-    let community_profile_url = format!(
-        "repos/{}/community/profile",
-        about_repo
-    );
+    let community_profile_url = format!("repos/{}/community/profile", about_repo);
 
     let mut description = String::new();
     let mut date = Utc::now().date_naive();
@@ -292,15 +289,18 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
     struct CommunityProfile {
         health_percentage: u16,
         description: Option<String>,
-        readme: Option<String>,
+        readme: Option<FileDetails>,
         updated_at: Option<DateTime<Utc>>,
     }
+    #[derive(Debug, Deserialize)]
+    pub struct FileDetails {
+        url: Option<String>,
+        html_url: Option<String>,
+    }
+
     let _openai = OpenAIFlows::new();
 
-    let community_profile_url = format!(
-        "/repos/{}/{}/community/profile",
-        owner, repo
-    );
+    let community_profile_url = format!("/repos/{}/{}/community/profile", owner, repo);
 
     let mut description = String::new();
     let mut date = Utc::now().date_naive();

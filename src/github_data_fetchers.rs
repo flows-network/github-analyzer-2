@@ -167,8 +167,7 @@ pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<Strin
         // documentation: Option<String>,
     }
 
-    let community_profile_url =
-        format!("repos/{owner}/{repo}/community/profile");
+    let community_profile_url = format!("repos/{owner}/{repo}/community/profile");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -213,7 +212,7 @@ pub async fn is_code_contributor(owner: &str, repo: &str, user_name: &str) -> bo
 }
 
 pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
-    #[derive(Debug, Deserialize, Serialize)]
+    #[derive(Debug, Deserialize)]
     struct GithubUser {
         login: String,
     }
@@ -488,8 +487,7 @@ pub async fn get_commits_in_range(
         None => String::from(""),
         Some(t) => format!("&token={}", t.as_str()),
     };
-    let base_commit_url =
-        format!("repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+    let base_commit_url = format!("repos/{owner}/{repo}/commits?&per_page=100{token_str}");
     // let base_commit_url =
     //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
 
