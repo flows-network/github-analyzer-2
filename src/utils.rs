@@ -1,8 +1,14 @@
 use http_req::{request::Method, request::Request, response, uri::Uri};
 use log;
-use openai_flows::{
-    chat::{ChatModel, ChatOptions},
-    OpenAIFlows,
+use async_openai::{
+    types::{
+        // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs, 
+        // FinishReason,
+    },
+    Client,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -115,7 +121,104 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
         .map_or("failed to decode tokens".to_string(), |s| s.to_string())
 }
 
+
 pub async fn chain_of_chat(
+    sys_prompt_1: &str,
+    usr_prompt_1: &str,
+    chat_id: &str,
+    gen_len_1: u16,
+    usr_prompt_2: &str,
+    gen_len_2: u16,
+    error_tag: &str,
+) -> anyhow::Result<String> {
+    let client = Client::new();
+
+    let mut messages = vec![
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content(sys_prompt_1)
+            .build()
+            .expect("Failed to build system message")
+            .into(),
+        ChatCompletionRequestUserMessageArgs::default()
+            .content(usr_prompt_1)
+            .build()?
+            .into(),
+    ];
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(gen_len_1)
+        .model("gpt-3.5-turbo-1106")
+        .messages(messages.clone())
+        .build()?;
+
+    let chat = client.chat().create(request).await?;
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {
+            log::info!("{:?}", res);
+        }
+        None => return Err(anyhow::anyhow!(error_tag.to_string())),
+    }
+
+    messages.push(
+        ChatCompletionRequestUserMessageArgs::default()
+            .content(usr_prompt_2)
+            .build()?
+            .into(),
+    );
+
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(gen_len_2)
+        .model("gpt-3.5-turbo-1106")
+        .messages(messages)
+        .build()?;
+
+    let chat = client.chat().create(request).await?;
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {
+            log::info!("{:?}", res);
+            Ok(res)
+        }
+        None => return Err(anyhow::anyhow!(error_tag.to_string())),
+    }
+}
+
+pub async fn chat_inner(
+    system_prompt: &str,
+    user_input: &str,
+    max_token: u16,
+    model: &str,
+) -> anyhow::Result<String> {
+    let client = Client::new();
+
+    let messages = vec![
+        ChatCompletionRequestSystemMessageArgs::default()
+            .content(system_prompt)
+            .build()
+            .expect("Failed to build system message")
+            .into(),
+        ChatCompletionRequestUserMessageArgs::default()
+            .content(user_input)
+            .build()?
+            .into(),
+    ];
+    let request = CreateChatCompletionRequestArgs::default()
+        .max_tokens(max_token)
+        .model(model)
+        .messages(messages)
+        .build()?;
+
+    let chat = client.chat().create(request).await?;
+
+    // let check = chat.choices.get(0).clone().unwrap();
+    // send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
+
+    match chat.choices[0].message.clone().content {
+        Some(res) => {log::info!("{:?}", chat.choices[0].message.clone()); Ok(res)},
+        None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
+    }
+}
+/* pub async fn chain_of_chat(
     sys_prompt_1: &str,
     usr_prompt_1: &str,
     chat_id: &str,
@@ -169,7 +272,7 @@ pub async fn chain_of_chat(
     }
 
     None
-}
+} */
 
 pub async fn save_user(owner: &str, repo: &str, user_name: &str) -> bool {
     use std::hash::Hasher;

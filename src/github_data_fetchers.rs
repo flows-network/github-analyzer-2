@@ -5,11 +5,7 @@ use derivative::Derivative;
 use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
 use github_flows::{get_octo, octocrab, GithubLogin};
 use http_req::response::{self, Response};
-use openai_flows::{
-    self,
-    chat::{self, ChatOptions},
-    OpenAIFlows,
-};
+
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::ascii::AsciiExt;

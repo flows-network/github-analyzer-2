@@ -2,9 +2,7 @@ pub mod data_analyzers;
 pub mod github_data_fetchers;
 pub mod reports;
 pub mod utils;
-use data_analyzers::{
-    get_repo_info, get_repo_overview_by_scraper, maybe_include_search_data, search_bing,
-};
+use data_analyzers::{get_repo_info, get_repo_overview_by_scraper, search_bing};
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -26,7 +24,7 @@ async fn handler(
     _headers: Vec<(String, String)>,
     _subpath: String,
     _qry: HashMap<String, Value>,
-    _body: Vec<u8>
+    _body: Vec<u8>,
 ) {
     // let github_token = env::var("github_token").expect("github_token was not present in env");
     let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
@@ -127,7 +125,7 @@ async fn handler(
         .as_str()
         .map(|n| n.to_string());
 
-    let output = weekly_report( &owner, &repo, user_name, token.clone()).await;
+    let output = weekly_report(&owner, &repo, user_name, token.clone()).await;
 
     send_response(
         200,
