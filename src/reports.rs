@@ -23,7 +23,7 @@ pub async fn weekly_report(
     let mut _profile_data = String::new();
 
     match is_valid_owner_repo_integrated( owner, repo).await {
-        None => {
+        Err(_e) => {
             send_response(
                 400,
                 vec![(String::from("content-type"), String::from("text/plain"))],
@@ -33,7 +33,7 @@ pub async fn weekly_report(
             );
             std::process::exit(1);
         }
-        Some(gm) => {
+        Ok(gm) => {
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload);
         }
     }

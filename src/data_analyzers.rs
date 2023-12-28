@@ -284,7 +284,7 @@ pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
     }
 }
 
-pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<GitMemory> {
+pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::Result<GitMemory> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -332,7 +332,10 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
         }
         Err(e) => {
             log::error!("Error parsing Community Profile: {:?}", e);
-            return None;
+            return Err(anyhow::anyhow!(
+                "no Community Profile, so invalid owner/repo: {:?}",
+                e
+            ));
         }
     }
 
@@ -348,17 +351,13 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
         }
     }
 
-    if description.is_empty() && payload.is_empty() {
-        return None;
-    }
-
     if description.is_empty() {
         description = payload.clone();
     } else if payload.is_empty() {
         payload = description.clone();
     }
 
-    Some(GitMemory {
+    Ok(GitMemory {
         memory_type: MemoryType::Meta,
         name: format!("{}/{}", owner, repo),
         tag_line: description,
