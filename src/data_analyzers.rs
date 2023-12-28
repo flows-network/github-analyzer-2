@@ -114,8 +114,6 @@ pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
     }
 }
 
-
-
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct CommunityProfile {
@@ -124,7 +122,6 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
         readme: Option<String>,
         updated_at: Option<DateTime<Utc>>,
     }
-    let _openai = OpenAIFlows::new();
 
     let community_profile_url = format!("repos/{}/community/profile", about_repo);
 
@@ -173,8 +170,6 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     }
 }
 pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
-    let mut _openai = OpenAIFlows::new();
-    _openai.set_retry_times(2);
     let repo_home_url = format!("https://github.com/{}", about_repo);
 
     let mut raw_text = String::new();
@@ -195,22 +190,10 @@ pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
 
     let sys_prompt = "Your task is to examine the textual content from a GitHub repo page, emphasizing the Header, About, Release, Contributors, Languages, and README sections. This process should be carried out objectively, focusing on factual information extraction from each segment. Avoid making subjective judgments or inferences. The data should be presented systematically, corresponding to each section. Please note, the provided text will be in a flattened format.";
 
-    let co = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo16K,
-        system_prompt: Some(sys_prompt),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(700),
-        ..Default::default()
-    };
-
     let usr_prompt = &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
 
-    match _openai
-        .chat_completion("repo_overview_99", usr_prompt, &co)
-        .await
-    {
-        Ok(r) => return Some(r.choice),
+    match chat_inner(sys_prompt, usr_prompt, 700, "gpt-3.5-turbo-1106").await {
+        Ok(r) => return Some(r),
         Err(_e) => {
             log::error!("Error summarizing meta data: {}", _e);
             return None;
@@ -346,20 +329,9 @@ pub async fn process_issues(
     Some((issues_summaries, count, git_memory_vec))
 }
 pub async fn analyze_readme(content: &str) -> Option<String> {
-    let _openai = OpenAIFlows::new();
-
     let sys_prompt_1 = &format!(
         "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
     );
-
-    let co = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo16K,
-        system_prompt: Some(sys_prompt_1),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(256),
-        ..Default::default()
-    };
 
     let content = if content.len() > 48_000 {
         squeeze_fit_remove_quoted(&content, 9_000, 0.7)
@@ -370,11 +342,8 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
         "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
     );
 
-    match _openai
-        .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
-        .await
-    {
-        Ok(r) => Some(r.choice),
+    match chat_inner(sys_prompt_1, usr_prompt_1, 256, "gpt-3.5-turbo-1106").await {
+        Ok(r) => return Some(r),
         Err(e) => {
             log::error!("Error summarizing meta data: {}", e);
             None
@@ -389,7 +358,6 @@ pub async fn analyze_issue_integrated(
     is_sparce: bool,
     token: Option<String>,
 ) -> Option<(String, GitMemory)> {
-    let _openai = OpenAIFlows::new();
     let bpe = tiktoken_rs::cl100k_base().unwrap();
 
     let issue_creator_name = &issue.user.login;
@@ -483,43 +451,21 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-    let co = if is_sparce {
-        ChatOptions {
-            model: chat::ChatModel::GPT35Turbo16K,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(128),
-            ..Default::default()
-        }
-    } else {
-        ChatOptions {
-            model: chat::ChatModel::GPT35Turbo,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(128),
-            ..Default::default()
-        }
-    };
 
     let usr_prompt_1 = &format!(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
     );
 
-    match _openai
-        .chat_completion(&format!("issue_{issue_number}"), usr_prompt_1, &co)
-        .await
-    {
+    match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
         Ok(r) => {
-            let out = format!("{} {}", issue_url, r.choice);
+            let out = format!("{} {}", issue_url, r);
             let name = target_person.map_or(issue_creator_name.to_string(), |t| t.to_string());
             let gm = GitMemory {
                 memory_type: MemoryType::Issue,
                 name: name,
                 tag_line: issue_title,
                 source_url: source_url,
-                payload: r.choice,
+                payload: r,
                 date: issue_date,
             };
 
@@ -540,8 +486,6 @@ pub async fn analyze_commit_integrated(
     is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<String> {
-    let _openai = OpenAIFlows::new();
-
     let token_str = match token {
         None => String::new(),
         Some(t) => format!("&token={}", t.as_str()),
@@ -606,15 +550,6 @@ pub async fn analyze_commit_integrated(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
 
-    let mut co: ChatOptions = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo,
-        system_prompt: Some(sys_prompt_1),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(128),
-        ..Default::default()
-    };
-
     let stripped_texts = if !is_sparce {
         let stripped_texts = text
             .splitn(2, "diff --git")
@@ -625,14 +560,6 @@ pub async fn analyze_commit_integrated(
         let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
         squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
     } else {
-        co = ChatOptions {
-            model: chat::ChatModel::GPT35Turbo16K,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(128),
-            ..Default::default()
-        };
         text.chars().take(24_000).collect::<String>()
     };
 
@@ -640,14 +567,6 @@ pub async fn analyze_commit_integrated(
     //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
     // } else {
     //     if stripped_texts.len() > 12_000 {
-    //         co = ChatOptions {
-    //             model: chat::ChatModel::GPT35Turbo16K,
-    //             system_prompt: Some(sys_prompt_1),
-    //             restart: true,
-    //             temperature: Some(0.7),
-    //             max_tokens: Some(128),
-    //             ..Default::default()
-    //         };
     //     }
     //     squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
     // };
@@ -660,12 +579,10 @@ pub async fn analyze_commit_integrated(
         Some(s) => s.chars().take(5).collect::<String>(),
         None => "0000".to_string(),
     };
-    match _openai
-        .chat_completion(&format!("commit-{sha_serial}"), usr_prompt_1, &co)
-        .await
-    {
+    match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
+
         Ok(r) => {
-            let out = format!("{} {}", url, r.choice);
+            let out = format!("{} {}", url, r);
             Ok(out)
         }
         Err(_e) => {
@@ -834,7 +751,8 @@ pub async fn correlate_commits_issues_discussions(
         gen_2_size,
         "correlate_commits_issues_discussions",
     )
-    .await.ok()
+    .await
+    .ok()
 }
 
 pub async fn correlate_user_and_home_project(
@@ -875,5 +793,6 @@ pub async fn correlate_user_and_home_project(
         256,
         "correlate-user-home-summary",
     )
-    .await.ok()
+    .await
+    .ok()
 }

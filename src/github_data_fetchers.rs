@@ -1155,8 +1155,6 @@ pub async fn search_discussions_integrated(
         login: Option<String>,
     }
 
-    let openai = OpenAIFlows::new();
-
     let query = format!(
         r#"
         query {{
@@ -1272,41 +1270,19 @@ pub async fn search_discussions_integrated(
                             "Analyze the provided GitHub discussion. Identify the main topic, actions by participants, crucial viewpoints, solutions or consensus reached, and particularly highlight the contributions of specific individuals, especially '{target_str}'. Summarize without being verbose."
                         );
 
-                let co = match disuccsion_texts.len() > 12000 {
-                    true => ChatOptions {
-                        model: chat::ChatModel::GPT35Turbo16K,
-                        system_prompt: Some(sys_prompt_1),
-                        restart: true,
-                        temperature: Some(0.7),
-                        max_tokens: Some(256),
-                        ..Default::default()
-                    },
-                    false => ChatOptions {
-                        model: chat::ChatModel::GPT35Turbo,
-                        system_prompt: Some(sys_prompt_1),
-                        restart: true,
-                        temperature: Some(0.7),
-                        max_tokens: Some(192),
-                        ..Default::default()
-                    },
-                };
-
                 let usr_prompt_1 = &format!(
                             "Analyze the content: {disuccsion_texts}. Briefly summarize the central topic, participants' actions, primary viewpoints, and outcomes. Emphasize the role of '{target_str}' in driving the discussion or reaching a resolution. Aim for a succinct summary that is rich in analysis and under 192 tokens."
                         );
 
-                match openai
-                    .chat_completion("discussion99", usr_prompt_1, &co)
-                    .await
-                {
+                match chat_inner(sys_prompt_1, usr_prompt_1, 256, "gpt-3.5-turbo-1106").await {
                     Ok(r) => {
-                        text_out.push_str(&(format!("{} {}", url, r.choice)));
+                        text_out.push_str(&(format!("{} {}", url, r)));
                         git_mem_vec.push(GitMemory {
                             memory_type: MemoryType::Discussion,
                             name: author_login,
                             tag_line: title,
                             source_url: source_url,
-                            payload: r.choice,
+                            payload: r,
                             date: date,
                         });
                     }
