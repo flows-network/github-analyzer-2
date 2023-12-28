@@ -289,36 +289,23 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
     struct CommunityProfile {
         health_percentage: u16,
         description: Option<String>,
+        files: FileDetails,
         updated_at: Option<DateTime<Utc>>,
     }
-
-    let octocrab = get_octo(&GithubLogin::Default);
-
-    #[derive(Deserialize)]
-    struct RepositoryRoot {
-        id: u64,
-        full_name: String,
+    #[derive(Debug, Deserialize)]
+    pub struct FileDetails {
+        readme: Option<Readme>,
     }
-    let repo_url = format!("/repos/{}/{}/", owner, repo);
-
-    match octocrab
-        .get::<RepositoryRoot, _, ()>(&repo_url, None::<&()>)
-        .await
-    {
-        Ok(r) => {
-            if r.full_name != format!("{}/{}", owner, repo) {
-                return None;
-            }
-        }
-        Err(e) => {
-            log::error!("Failed to locate the owner/repo: {:?}", e);
-            return None;
-        }
+    #[derive(Debug, Deserialize)]
+    pub struct Readme {
+        url: Option<String>,
     }
+    let community_profile_url = format!("repos/{}/{}/community/profile", owner, repo);
 
     let mut description = String::new();
     let mut date = Utc::now().date_naive();
-    let community_profile_url = format!("/repos/{}/{}/community/profile", owner, repo);
+    let mut has_readme = false;
+    let octocrab = get_octo(&GithubLogin::Default);
 
     match octocrab
         .get::<CommunityProfile, _, ()>(&community_profile_url, None::<&()>)
@@ -335,21 +322,32 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> Option<G
                 .as_ref()
                 .unwrap_or(&Utc::now())
                 .date_naive();
+            has_readme = profile
+                .files
+                .readme
+                .as_ref()
+                .unwrap_or(&Readme { url: None })
+                .url
+                .is_some();
         }
-        Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
+        Err(e) => {
+            log::error!("Error parsing Community Profile: {:?}", e);
+            return None;
+        }
     }
 
     let mut payload = String::new();
-    match get_readme(owner, repo).await {
-        Some(content) => {
+
+    if has_readme {
+        if let Some(content) = get_readme(owner, repo).await {
             let content = content.chars().take(20000).collect::<String>();
             match analyze_readme(&content).await {
                 Some(summary) => payload = summary,
                 None => log::error!("Error parsing README.md: {}/{}", owner, repo),
             }
         }
-        None => log::error!("Error fetching README.md: {}/{}", owner, repo),
-    };
+    }
+
     if description.is_empty() && payload.is_empty() {
         return None;
     }
