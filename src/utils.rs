@@ -1,15 +1,16 @@
-use http_req::{request::Method, request::Request, response, uri::Uri};
-use log;
 use async_openai::{
     types::{
         // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs,
         // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs, 
+        CreateChatCompletionRequestArgs,
         // FinishReason,
     },
     Client,
 };
+use http_req::{request::Method, request::Request, response, uri::Uri};
+use log;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -121,7 +122,6 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
         .map_or("failed to decode tokens".to_string(), |s| s.to_string())
 }
 
-
 pub async fn chain_of_chat(
     sys_prompt_1: &str,
     usr_prompt_1: &str,
@@ -214,7 +214,10 @@ pub async fn chat_inner(
     // send_message_to_channel("ik8", "general", format!("{:?}", check)).await;
 
     match chat.choices[0].message.clone().content {
-        Some(res) => {log::info!("{:?}", chat.choices[0].message.clone()); Ok(res)},
+        Some(res) => {
+            log::info!("{:?}", chat.choices[0].message.clone());
+            Ok(res)
+        }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
 }
@@ -379,43 +382,37 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
 }
 
 pub fn parse_summary_from_raw_json(input: &str) -> String {
-    let keys = [
-        "impactful",
-        "alignment",
-        "patterns",
-        "synergy",
-        "significance",
-    ];
-    let mut output = String::new();
+    #[derive(Deserialize, Debug)]
 
-    for i in 0..keys.len() {
-        let key_string = format!("\"{}\":", keys[i]);
-        if let Some(start) = input.find(&key_string) {
-            let value_start = start + key_string.len();
-            let value_end = if i < keys.len() - 1 {
-                let next_key = format!("\"{}\":", keys[i + 1]);
-                match input[value_start..].find(&next_key) {
-                    Some(end) => end,
-                    None => input.len() - value_start,
-                }
-            } else {
-                input.len() - value_start
-            };
-            let value = &input[value_start..value_start + value_end]
-                .trim()
-                .trim_matches('"');
-            let value = value
-                .replace("\n", " ")
-                .replace('{', "")
-                .trim()
-                .replace('}', "");
-            if value.len() >= 15 {
-                output += "- ";
-                output += value.trim();
-                output += "\n";
-            }
-        }
+    struct SummaryStruct {
+        impactful: Option<String>,
+        alignment: Option<String>,
+        patterns: Option<String>,
+        synergy: Option<String>,
+        significance: Option<String>,
     }
 
-    output.trim_end().to_string()
+    let summary: SummaryStruct = serde_json::from_str(input).expect("Failed to parse summary JSON");
+
+    let mut output = String::new();
+
+    let fields = [
+        &summary.impactful,
+        &summary.alignment,
+        &summary.patterns,
+        &summary.synergy,
+        &summary.significance,
+    ];
+
+    fields
+        .iter()
+        .filter_map(|&field| field.as_ref()) // Convert Option<&String> to Option<&str>
+        .filter(|field| !field.is_empty()) // Filter out empty strings
+        .fold(String::new(), |mut acc, field| {
+            if !acc.is_empty() {
+                acc.push_str(" ");
+            }
+            acc.push_str(field);
+            acc
+        })
 }

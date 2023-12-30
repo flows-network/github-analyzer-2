@@ -498,7 +498,7 @@ pub async fn analyze_commit_integrated(
     let octocrab = get_octo(&GithubLogin::Default);
 
     let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
-    let text: String = response.text().await?;
+    let text = response.text().await?;
     // let mut stripped_texts = String::with_capacity(text.len());
 
     // 'commit_text_block: {
@@ -732,6 +732,7 @@ pub async fn correlate_commits_issues_discussions(
         - Identify recurring patterns or trends.
         - Discuss synergy between individual and collective advancement.
         - Comment objectively on the significance of each contribution. 
+        Please reply with valid, iterable RFC8259 compliant JSON in your response 
         ```
         {{
           "impactful": "",
