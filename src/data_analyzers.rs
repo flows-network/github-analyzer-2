@@ -726,22 +726,17 @@ pub async fn correlate_commits_issues_discussions(
     //     - Comment objectively on the significance of each contribution."
     // );
     let usr_prompt_2 = &format!(
-        r#"Analyze the key technical contributions made by {target_str} this week. Consider the following points and express the information in JSON format. If no information is available for a point, leave it blank.
-        - Highlight impactful contributions and their interconnections.
-        - Explain alignment with the project's goals.
-        - Identify recurring patterns or trends.
-        - Discuss synergy between individual and collective advancement.
-        - Comment objectively on the significance of each contribution. 
-        Please reply with valid, iterable RFC8259 compliant JSON in your response 
-        ```
-        {{
-          "impactful": "",
-          "alignment": "",
-          "patterns": "",
-          "synergy": "",
-          "significance": ""
-        }}
-        ```"#,
+        r#"Analyze the key technical contributions made by {target_str} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph. Do not include nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
+
+Please ensure that the JSON output is compliant with RFC8259 and can be iterated as simple key-value pairs where the values are strings. Your response should follow this template:
+{{
+"impactful": "Provide a single string value summarizing impactful contributions and their interconnections.",
+"alignment": "Provide a single string value explaining how the contributions align with the project's goals.",
+"patterns": "Provide a single string value identifying any recurring patterns or trends in the contributions.",
+"synergy": "Provide a single string value discussing the synergy between individual and collective advancement.",
+"significance": "Provide a single string value commenting on the significance of the contributions."
+}}
+"#,
     );
     chain_of_chat(
         sys_prompt_1,
