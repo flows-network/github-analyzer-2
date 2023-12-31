@@ -2,117 +2,13 @@ use crate::github_data_fetchers::*;
 use crate::utils::*;
 use chrono::{DateTime, Utc};
 use github_flows::{
-    get_octo, octocrab,
+    get_octo,
     octocrab::models::{issues::Comment, issues::Issue},
     GithubLogin,
 };
 use log;
 
 use serde::Deserialize;
-
-pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
-    #[derive(Debug, Clone, Deserialize)]
-    struct QueryContext {
-        originalQuery: String,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct WebPage {
-        id: String,
-        name: String,
-        url: String,
-        isFamilyFriendly: bool,
-        displayUrl: String,
-        snippet: String,
-        dateLastCrawled: String,
-        language: String,
-        isNavigational: bool,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct WebPages {
-        webSearchUrl: String,
-        totalEstimatedMatches: u64,
-        value: Vec<WebPage>,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct RankingResponse {
-        mainline: Mainline,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct Mainline {
-        items: Vec<Item>,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct Item {
-        answerType: String,
-        resultIndex: u64,
-        value: ItemValue,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct ItemValue {
-        id: String,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    struct SearchResponse {
-        _type: String,
-        queryContext: QueryContext,
-        webPages: WebPages,
-        rankingResponse: RankingResponse,
-    }
-
-    let encoded_query = urlencoding::encode(query);
-
-    let url_str = format!(
-        "https://api.bing.microsoft.com/v7.0/search?count=1&q={}&responseFilter=Webpages&setLang=en",
-        encoded_query
-    );
-
-    let url = http_req::uri::Uri::try_from(url_str.as_str()).unwrap();
-    let mut writer = Vec::new();
-
-    match http_req::request::Request::new(&url)
-        .method(http_req::request::Method::GET)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "application/vnd.github.v3+json")
-        .header("Ocp-Apim-Subscription-Key", &format!("{bing_key}"))
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                log::error!("Github http error {:?}", res.status_code());
-                return None;
-            };
-
-            match serde_json::from_slice::<SearchResponse>(&writer) {
-                Err(_e) => {
-                    log::error!("Error parsing SearchResponse: {:?}", _e);
-                    None
-                }
-                Ok(search_response) => {
-                    let out = search_response
-                        .webPages
-                        .value
-                        .iter()
-                        .map(|val| format!("webpage at {} states: {}", val.url, val.snippet))
-                        .collect::<Vec<String>>()
-                        .join("\n");
-
-                    Some(out)
-                }
-            }
-        }
-        Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-            None
-        }
-    }
-}
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -580,7 +476,6 @@ pub async fn analyze_commit_integrated(
         None => "0000".to_string(),
     };
     match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
-
         Ok(r) => {
             let out = format!("{} {}", url, r);
             Ok(out)

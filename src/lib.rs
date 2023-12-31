@@ -2,7 +2,7 @@ pub mod data_analyzers;
 pub mod github_data_fetchers;
 pub mod reports;
 pub mod utils;
-use data_analyzers::{get_repo_info, get_repo_overview_by_scraper, search_bing};
+use data_analyzers::{get_repo_info, get_repo_overview_by_scraper};
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -26,47 +26,6 @@ async fn handler(
     _qry: HashMap<String, Value>,
     _body: Vec<u8>,
 ) {
-    // let github_token = env::var("github_token").expect("github_token was not present in env");
-    let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
-
-    let user_login = _qry
-        .get("login")
-        .unwrap_or(&Value::Null)
-        .as_str()
-        .map(|n| n.to_string());
-
-    if user_login.is_some() {
-        match get_user_data_by_login(&user_login.clone().unwrap()).await {
-            Ok(pro) => {
-                let query = &format!("github user {}", user_login.unwrap());
-
-                let search_data = search_bing(&Ocp_Apim_Subscription_Key, query)
-                    .await
-                    .unwrap_or("".to_string());
-
-                // let res = maybe_include_search_data(&pro, &search_data)
-                //     .await
-                //     .unwrap_or("failed to merge data".to_string());
-
-                send_response(
-                    200,
-                    vec![(String::from("content-type"), String::from("text/plain"))],
-                    format!(
-                        "Found on profile: {}\nFound with search: {}",
-                        pro, search_data
-                    )
-                    .as_bytes()
-                    .to_vec(),
-                )
-            }
-            Err(_e) => send_response(
-                400,
-                vec![(String::from("content-type"), String::from("text/plain"))],
-                "failed to find user with such login.".as_bytes().to_vec(),
-            ),
-        }
-        return;
-    }
     let about_repo = _qry
         .get("about_repo")
         .unwrap_or(&Value::Null)

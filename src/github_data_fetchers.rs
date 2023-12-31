@@ -4,11 +4,9 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derivative::Derivative;
 use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
 use github_flows::{get_octo, octocrab, GithubLogin};
-use http_req::response::{self, Response};
 
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::ascii::AsciiExt;
 use store_flows::{get, set};
 
 #[derive(Derivative, Serialize, Deserialize, Debug, Clone)]

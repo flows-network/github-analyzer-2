@@ -9,7 +9,6 @@ use async_openai::{
     },
     Client,
 };
-use http_req::{request::Method, request::Request, response, uri::Uri};
 use log;
 use serde::Deserialize;
 use serde_json::Value;
@@ -221,61 +220,6 @@ pub async fn chat_inner(
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
 }
-/* pub async fn chain_of_chat(
-    sys_prompt_1: &str,
-    usr_prompt_1: &str,
-    chat_id: &str,
-    gen_len_1: u16,
-    usr_prompt_2: &str,
-    gen_len_2: u16,
-    error_tag: &str,
-) -> Option<String> {
-    let openai = OpenAIFlows::new();
-
-    let co_1 = ChatOptions {
-        model: ChatModel::GPT35Turbo16K,
-        restart: true,
-        system_prompt: Some(sys_prompt_1),
-        max_tokens: Some(gen_len_1),
-        temperature: Some(0.7),
-        ..Default::default()
-    };
-
-    match openai.chat_completion(chat_id, usr_prompt_1, &co_1).await {
-        Ok(res_1) => {
-            let sys_prompt_2 = serde_json::json!([{"role": "system", "content": sys_prompt_1},
-    {"role": "user", "content": usr_prompt_1},
-    {"role": "assistant", "content": &res_1.choice}])
-            .to_string();
-
-            let co_2 = ChatOptions {
-                model: ChatModel::GPT35Turbo16K,
-                restart: false,
-                system_prompt: Some(&sys_prompt_2),
-                max_tokens: Some(gen_len_2),
-                temperature: Some(0.7),
-                ..Default::default()
-            };
-            match openai.chat_completion(chat_id, usr_prompt_2, &co_2).await {
-                Ok(res_2) => {
-                    if res_2.choice.len() < 10 {
-                        log::error!(
-                            "{}, GPT generation went sideway: {:?}",
-                            error_tag,
-                            res_2.choice
-                        );
-                        return None;
-                    }
-                    return Some(res_2.choice);
-                }
-                Err(_e) => log::error!("{}, Step 2 GPT generation error {:?}", error_tag, _e),
-            };
-        }
-        Err(_e) => log::error!("{}, Step 1 GPT generation error {:?}", error_tag, _e),
-    }
-
-    None
-} */
 
 pub async fn save_user(owner: &str, repo: &str, user_name: &str) -> bool {
     use std::hash::Hasher;
@@ -381,57 +325,22 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
     Some(summary.concise_summary.unwrap_or("".to_string()))
 }
 
-
-/* pub fn parse_summary_from_raw_json(input: &str) -> String {
-    #[derive(Deserialize, Debug)]
-
-    struct SummaryStruct {
-        impactful: Option<String>,
-        alignment: Option<String>,
-        patterns: Option<String>,
-        synergy: Option<String>,
-        significance: Option<String>,
-    }
-
-    let summary: SummaryStruct = serde_json::from_str(input).expect("Failed to parse summary JSON");
-
-    let mut output = String::new();
-
-    let fields = [
-        &summary.impactful,
-        &summary.alignment,
-        &summary.patterns,
-        &summary.synergy,
-        &summary.significance,
-    ];
-
-    fields
-        .iter()
-        .filter_map(|&field| field.as_ref()) // Convert Option<&String> to Option<&str>
-        .filter(|field| !field.is_empty()) // Filter out empty strings
-        .fold(String::new(), |mut acc, field| {
-            if !acc.is_empty() {
-                acc.push_str(" ");
-            }
-            acc.push_str(field);
-            acc
-        })
-} */
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
-    // Parse the input as a generic JSON Value first
     let parsed: Value = serde_json::from_str(input)?;
 
-    // Initialize an empty string to collect the summary
     let mut output = String::new();
 
-    // Define the keys we're interested in
-    let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+    let keys = [
+        "impactful",
+        "alignment",
+        "patterns",
+        "synergy",
+        "significance",
+    ];
 
-    // Iterate over the keys and extract string values from the JSON
     for key in keys.iter() {
         if let Some(value) = parsed.get(key) {
             if value.is_string() {
-                // Append the string value to the output with a space
                 if !output.is_empty() {
                     output.push_str(" ");
                 }
