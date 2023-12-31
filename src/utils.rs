@@ -381,7 +381,8 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
     Some(summary.concise_summary.unwrap_or("".to_string()))
 }
 
-pub fn parse_summary_from_raw_json(input: &str) -> String {
+
+/* pub fn parse_summary_from_raw_json(input: &str) -> String {
     #[derive(Deserialize, Debug)]
 
     struct SummaryStruct {
@@ -415,4 +416,29 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
             acc.push_str(field);
             acc
         })
+} */
+pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
+    // Parse the input as a generic JSON Value first
+    let parsed: Value = serde_json::from_str(input)?;
+
+    // Initialize an empty string to collect the summary
+    let mut output = String::new();
+
+    // Define the keys we're interested in
+    let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+
+    // Iterate over the keys and extract string values from the JSON
+    for key in keys.iter() {
+        if let Some(value) = parsed.get(key) {
+            if value.is_string() {
+                // Append the string value to the output with a space
+                if !output.is_empty() {
+                    output.push_str(" ");
+                }
+                output.push_str(value.as_str().unwrap());
+            }
+        }
+    }
+
+    Ok(output)
 }

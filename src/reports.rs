@@ -22,7 +22,7 @@ pub async fn weekly_report(
 
     let mut _profile_data = String::new();
 
-    match is_valid_owner_repo_integrated( owner, repo).await {
+    match is_valid_owner_repo_integrated(owner, repo).await {
         Err(_e) => {
             send_response(
                 400,
@@ -43,15 +43,7 @@ pub async fn weekly_report(
 
     let mut commits_summaries = String::new();
     'commits_block: {
-        match get_commits_in_range(
-            owner,
-            repo,
-            user_name.clone(),
-            n_days,
-            token.clone(),
-        )
-        .await
-        {
+        match get_commits_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, mut commits_vec, weekly_commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
@@ -70,15 +62,7 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(
-                    
-                    &mut commits_vec,
-                    _turbo,
-                    is_sparce,
-                    token.clone(),
-                )
-                .await
-                {
+                match process_commits(&mut commits_vec, _turbo, is_sparce, token.clone()).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }
@@ -102,15 +86,7 @@ pub async fn weekly_report(
     let mut issues_summaries = String::new();
 
     'issues_block: {
-        match get_issues_in_range(
-            owner,
-            repo,
-            user_name.clone(),
-            n_days,
-            token.clone(),
-        )
-        .await
-        {
+        match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
                     .iter()
@@ -132,7 +108,6 @@ pub async fn weekly_report(
                 };
                 issues_count = count;
                 match process_issues(
-                    
                     issue_vec,
                     user_name.clone(),
                     _turbo,
@@ -164,7 +139,7 @@ pub async fn weekly_report(
     };
 
     let mut discussion_data = String::new();
-    match search_discussions_integrated( &discussion_query, &user_name).await {
+    match search_discussions_integrated(&discussion_query, &user_name).await {
         Ok((summary, discussion_vec)) => {
             let count = discussion_vec.len();
             let discussions_str = discussion_vec
@@ -219,8 +194,9 @@ pub async fn weekly_report(
                 )
                 .await;
 
-                let clean_summary = parse_summary_from_raw_json(&final_summary);
-                report.push(clean_summary);
+                if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+                    report.push(clean_summary);
+                }
             }
         }
     }
