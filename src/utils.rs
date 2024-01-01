@@ -153,7 +153,7 @@ pub async fn chain_of_chat(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            log::info!("{:?}", res);
+            // log::info!("{:?}", res);
         }
         None => return Err(anyhow::anyhow!(error_tag.to_string())),
     }
@@ -175,7 +175,7 @@ pub async fn chain_of_chat(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            log::info!("{:?}", res);
+            // log::info!("{:?}", res);
             Ok(res)
         }
         None => return Err(anyhow::anyhow!(error_tag.to_string())),
@@ -216,7 +216,7 @@ pub async fn chat_inner(
 
     match chat.choices[0].message.clone().content {
         Some(res) => {
-            log::info!("{:?}", chat.choices[0].message.clone());
+            // log::info!("{:?}", chat.choices[0].message.clone());
             let elapsed = start_time.elapsed();
             log::info!(
                 "Time elapsed in chat_inner is: {} seconds",
