@@ -188,6 +188,8 @@ pub async fn chat_inner(
     max_token: u16,
     model: &str,
 ) -> anyhow::Result<String> {
+    use tokio::time::Instant;
+    let start_time = Instant::now();
     let client = Client::new();
 
     let messages = vec![
@@ -215,6 +217,11 @@ pub async fn chat_inner(
     match chat.choices[0].message.clone().content {
         Some(res) => {
             log::info!("{:?}", chat.choices[0].message.clone());
+            let elapsed = start_time.elapsed();
+            log::info!(
+                "Time elapsed in chat_inner is: {} seconds",
+                elapsed.as_secs(),
+            );
             Ok(res)
         }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),

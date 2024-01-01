@@ -394,11 +394,11 @@ pub async fn analyze_commit_integrated(
     let octocrab = get_octo(&GithubLogin::Default);
     let mut headers = HeaderMap::new();
     headers.insert(CONNECTION, HeaderValue::from_static("close"));
-
-    // let route = format!("http://10.0.0.174/headers");
     let response = octocrab
         ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
         .await?;
+
+    // let route = format!("http://10.0.0.174/headers");
 
     // let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
     let text = response.text().await?;
