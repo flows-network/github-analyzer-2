@@ -5,12 +5,6 @@ use chrono::{Duration, Utc};
 use log;
 use webhook_flows::send_response;
 
-pub async fn search_user(github_token: &str, user_login: &str) -> Option<String> {
-    get_user_data_by_login(user_login).await.ok()
-
-    // let repos = get_user_repos_gql( user).await;
-}
-
 pub async fn weekly_report(
     owner: &str,
     repo: &str,

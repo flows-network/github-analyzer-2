@@ -381,7 +381,7 @@ pub async fn analyze_issue_integrated(
     }
 }
 
-pub async fn analyze_commit_integrated(
+/* pub async fn analyze_commit_integrated(
     user_name: &str,
     tag_line: &str,
     url: &str,
@@ -405,56 +405,7 @@ pub async fn analyze_commit_integrated(
         ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
         .await?;
 
-    // let route = format!("http://10.0.0.174/headers");
-
-    // let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
     let text = response.text().await?;
-    // let mut stripped_texts = String::with_capacity(text.len());
-
-    // 'commit_text_block: {
-    //     let lines_count = text.lines().count();
-    //     if lines_count > 150 {
-    //         stripped_texts = text
-    //             .splitn(2, "diff --git")
-    //             .nth(0)
-    //             .unwrap_or("")
-    //             .to_string();
-    //         break 'commit_text_block;
-    //     }
-
-    //     let mut inside_diff_block = false;
-
-    //     match is_sparce {
-    //         false => {
-    //             for line in text.lines() {
-    //                 if line.starts_with("diff --git") {
-    //                     inside_diff_block = true;
-    //                     stripped_texts.push_str(line);
-    //                     stripped_texts.push('\n');
-    //                     continue;
-    //                 }
-
-    //                 if inside_diff_block {
-    //                     if line
-    //                         .chars()
-    //                         .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-    //                     {
-    //                         continue;
-    //                     }
-    //                 }
-
-    //                 stripped_texts.push_str(line);
-    //                 stripped_texts.push('\n');
-
-    //                 if line.is_empty() {
-    //                     inside_diff_block = false;
-    //                 }
-    //             }
-    //         }
-    //         true => stripped_texts = text.to_string(),
-    //     }
-    // }
-    // slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
 
     let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
@@ -472,14 +423,6 @@ pub async fn analyze_commit_integrated(
     } else {
         text.chars().take(24_000).collect::<String>()
     };
-
-    // let stripped_texts = if turbo {
-    //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-    // } else {
-    //     if stripped_texts.len() > 12_000 {
-    //     }
-    //     squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
-    // };
 
     let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
@@ -503,6 +446,53 @@ pub async fn analyze_commit_integrated(
             ))
         }
     }
+} */
+pub async fn get_commit(
+    user_name: &str,
+    tag_line: &str,
+    url: &str,
+    _turbo: bool,
+    is_sparce: bool,
+    token: Option<String>,
+) -> anyhow::Result<(String, String)> {
+    let token_str = match token {
+        None => String::new(),
+        Some(t) => format!("&token={}", t.as_str()),
+    };
+
+    let commit_patch_str = format!("{url}.patch{token_str}");
+
+    let octocrab = get_octo(&GithubLogin::Default);
+    let mut headers = HeaderMap::new();
+    headers.insert(CONNECTION, HeaderValue::from_static("close"));
+    let response = octocrab
+        ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
+        .await?;
+
+    let text = response.text().await?;
+
+    let sys_prompt_1 = &format!(
+                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
+            );
+
+    let stripped_texts = if !is_sparce {
+        let stripped_texts = text
+            .splitn(2, "diff --git")
+            .nth(0)
+            .unwrap_or("")
+            .to_string();
+
+        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+    } else {
+        text.chars().take(24_000).collect::<String>()
+    };
+
+    let usr_prompt_1 = &format!(
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
+            );
+
+    Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()))
 }
 
 pub async fn process_commits(
@@ -516,34 +506,26 @@ pub async fn process_commits(
     use tokio::time::Instant;
     let start_time = Instant::now();
 
-    for commit_obj in inp_vec.iter_mut() {
-        match analyze_commit_integrated(
-            &commit_obj.name,
-            &commit_obj.tag_line,
-            &commit_obj.source_url,
-            _turbo,
-            is_sparce,
-            token.clone(),
-        )
-        .await
-        {
-            Ok(summary) => {
-                let len = commits_summaries.split_whitespace().count();
-                if len > 3000 {
-                    break;
-                }
-                commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, summary));
+    let raw_commits_vec = aggregate_commits(inp_vec, _turbo, is_sparce, token).await;
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in aggregate_commits  is: {} seconds",
+        elapsed.as_secs(),
+    );
 
+    for (sys_prompt, user_prompt) in raw_commits_vec {
+        let chat_start_time = Instant::now(); // Start timing for chat_inner
+        match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
+            Ok(summary) => {
+                let chat_elapsed = chat_start_time.elapsed(); // Time for chat_inner
                 processed_count += 1;
-            }
-            Err(_e) => {
-                log::error!(
-                    "Error analyzing commit {:?} for user {}: {:?}",
-                    commit_obj.source_url,
-                    commit_obj.name,
-                    _e
+                commits_summaries.push_str(&format!("{}\n", summary));
+                log::info!(
+                    "Time elapsed for this summary: {:.2} seconds",
+                    chat_elapsed.as_secs_f32()
                 );
             }
+            Err(e) => log::error!("Error generating issue summary: {}", e),
         }
     }
 
@@ -558,6 +540,56 @@ pub async fn process_commits(
     );
 
     Some(commits_summaries)
+}
+
+pub async fn aggregate_commits(
+    inp_vec: &mut Vec<GitMemory>,
+    _turbo: bool,
+    is_sparce: bool,
+    token: Option<String>,
+) -> Vec<(String, String)> {
+    let mut raw_commits_vec: Vec<(String, String)> = Vec::new();
+    let mut processed_count = 0; // Number of processed entries
+    use tokio::time::Instant;
+    let start_time = Instant::now();
+
+    for commit_obj in inp_vec.iter_mut() {
+        match get_commit(
+            &commit_obj.name,
+            &commit_obj.tag_line,
+            &commit_obj.source_url,
+            _turbo,
+            is_sparce,
+            token.clone(),
+        )
+        .await
+        {
+            Ok(tup) => {
+                raw_commits_vec.push(tup);
+
+                processed_count += 1;
+            }
+            Err(_e) => {
+                log::error!(
+                    "Error aggregating commit {:?} for user {}: {:?}",
+                    commit_obj.source_url,
+                    commit_obj.name,
+                    _e
+                );
+            }
+        }
+    }
+
+    if processed_count == 0 {
+        log::error!("No commits processed");
+    }
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in aggregatting commits : {} seconds",
+        elapsed.as_secs(),
+    );
+
+    raw_commits_vec
 }
 
 pub async fn correlate_commits_issues_discussions(
