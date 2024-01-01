@@ -189,6 +189,8 @@ pub async fn process_issues(
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
+    use tokio::time::Instant;
+    let start_time = Instant::now();
 
     for issue in &inp_vec {
         match analyze_issue_integrated(
@@ -222,6 +224,11 @@ pub async fn process_issues(
         log::error!("No issues processed");
         return None;
     }
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in process issues is: {} seconds",
+        elapsed.as_secs(),
+    );
     Some((issues_summaries, count, git_memory_vec))
 }
 pub async fn analyze_readme(content: &str) -> Option<String> {
@@ -506,6 +513,8 @@ pub async fn process_commits(
 ) -> Option<String> {
     let mut commits_summaries = String::new();
     let mut processed_count = 0; // Number of processed entries
+    use tokio::time::Instant;
+    let start_time = Instant::now();
 
     for commit_obj in inp_vec.iter_mut() {
         match analyze_commit_integrated(
@@ -542,6 +551,11 @@ pub async fn process_commits(
         log::error!("No commits processed");
         return None;
     }
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in process commits is: {} seconds",
+        elapsed.as_secs(),
+    );
 
     Some(commits_summaries)
 }

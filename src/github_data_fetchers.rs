@@ -341,6 +341,8 @@ pub async fn get_issues_in_range(
         pub items: Vec<T>,
         pub total_count: Option<u64>,
     }
+    use tokio::time::Instant;
+    let start_time = Instant::now();
 
     let n_days_ago = (Utc::now() - Duration::days(range as i64))
         .format("%Y-%m-%dT%H:%M:%SZ")
@@ -378,6 +380,12 @@ pub async fn get_issues_in_range(
         }
     }
     let count = issue_vec.len();
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in get_issues_in_range is: {} seconds",
+        elapsed.as_secs(),
+    );
+
     Some((count, issue_vec))
 }
 
@@ -484,6 +492,8 @@ pub async fn get_commits_in_range(
     let base_commit_url = format!("repos/{owner}/{repo}/commits?&per_page=100{token_str}");
     // let base_commit_url =
     //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+    use tokio::time::Instant;
+    let start_time = Instant::now();
 
     let mut git_memory_vec = vec![];
     let mut weekly_git_memory_vec = vec![];
@@ -534,6 +544,12 @@ pub async fn get_commits_in_range(
         git_memory_vec = weekly_git_memory_vec.clone();
     }
     let count = git_memory_vec.len();
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in get_commits_in_range is: {} seconds",
+        elapsed.as_secs(),
+    );
+
     Some((count, git_memory_vec, weekly_git_memory_vec))
 }
 
