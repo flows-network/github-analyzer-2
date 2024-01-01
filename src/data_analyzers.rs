@@ -457,42 +457,70 @@ pub async fn get_commit(
 ) -> anyhow::Result<(String, String)> {
     let token_str = match token {
         None => String::new(),
-        Some(t) => format!("&token={}", t.as_str()),
+        Some(ref t) => format!("&token={}", t.as_str()),
     };
 
     let commit_patch_str = format!("{url}.patch{token_str}");
 
-    let octocrab = get_octo(&GithubLogin::Default);
-    let mut headers = HeaderMap::new();
-    headers.insert(CONNECTION, HeaderValue::from_static("close"));
-    let response = octocrab
-        ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
-        .await?;
-
-    let text = response.text().await?;
-
-    let sys_prompt_1 = &format!(
+    let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
+        .expect(&format!("Error generating URI from {:?}", commit_patch_str));
+    let mut writer = Vec::new();
+    match http_req::request::Request::new(&uri)
+        .method(http_req::request::Method::GET)
+        .header("User-Agent", "flows-network connector")
+        .header("Content-Type", "plain/text")
+        .header("Authorization", &format!("Bearer {}", token.unwrap_or_default()))
+        .send(&mut writer)
+    {
+        Ok(res) => {
+            if !res.status_code().is_success() {
+                log::error!("Github http error {:?}", res.status_code());
+                return Err(anyhow::anyhow!("Github http error {:?}", res.status_code()));
+            }
+            let text = String::from_utf8_lossy(writer.as_slice());
+            let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
 
-    let stripped_texts = if !is_sparce {
-        let stripped_texts = text
-            .splitn(2, "diff --git")
-            .nth(0)
-            .unwrap_or("")
-            .to_string();
+            let stripped_texts = if !is_sparce {
+                let stripped_texts = text
+                    .splitn(2, "diff --git")
+                    .nth(0)
+                    .unwrap_or("")
+                    .to_string();
 
-        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-    } else {
-        text.chars().take(24_000).collect::<String>()
-    };
+                let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+            } else {
+                text.chars().take(24_000).collect::<String>()
+            };
 
-    let usr_prompt_1 = &format!(
+            let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
 
-    Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()))
+            return Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()));
+        }
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+            return Err(anyhow::anyhow!(
+                "Error getting response from Github: {:?}",
+                _e
+            ));
+        }
+    };
+    Err(anyhow::anyhow!(
+        "Error getting response from Github: {:?}",
+        "hellow"
+    ))
+    // let octocrab = get_octo(&GithubLogin::Default);
+    // let mut headers = HeaderMap::new();
+    // headers.insert(CONNECTION, HeaderValue::from_static("close"));
+    // let response = octocrab
+    //     ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
+    //     .await?;
+
+    // let text = response.text().await?;
 }
 
 pub async fn process_commits(
@@ -739,4 +767,30 @@ pub async fn correlate_user_and_home_project(
     )
     .await
     .ok()
+}
+
+pub async fn github_http_fetch(token: &str, url: &str) -> Option<Vec<u8>> {
+    let url = http_req::uri::Uri::try_from(url).unwrap();
+    let mut writer = Vec::new();
+
+    match http_req::request::Request::new(&url)
+        .method(http_req::request::Method::GET)
+        .header("User-Agent", "flows-network connector")
+        .header("Content-Type", "application/vnd.github.v3+json")
+        .header("Authorization", &format!("Bearer {token}"))
+        .send(&mut writer)
+    {
+        Ok(res) => {
+            if !res.status_code().is_success() {
+                log::error!("Github http error {:?}", res.status_code());
+                return None;
+            };
+
+            Some(writer)
+        }
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+            None
+        }
+    }
 }
