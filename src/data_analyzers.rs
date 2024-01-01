@@ -6,8 +6,8 @@ use github_flows::{
     octocrab::models::{issues::Comment, issues::Issue},
     GithubLogin,
 };
+use http::header::{HeaderMap, HeaderValue, CONNECTION};
 use log;
-
 use serde::Deserialize;
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
@@ -392,8 +392,15 @@ pub async fn analyze_commit_integrated(
     //     .expect(&format!("Error generating URI from {:?}", commit_patch_str));
 
     let octocrab = get_octo(&GithubLogin::Default);
+    let mut headers = HeaderMap::new();
+    headers.insert(CONNECTION, HeaderValue::from_static("close"));
 
-    let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
+    // let route = format!("http://10.0.0.174/headers");
+    let response = octocrab
+        ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
+        .await?;
+
+    // let response = octocrab._get(&commit_patch_str, None::<&()>).await?;
     let text = response.text().await?;
     // let mut stripped_texts = String::with_capacity(text.len());
 
