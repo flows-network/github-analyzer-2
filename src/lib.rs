@@ -26,6 +26,10 @@ async fn handler(
     _qry: HashMap<String, Value>,
     _body: Vec<u8>,
 ) {
+
+    dotenv().ok();
+    logger::init();
+    
     let about_repo = _qry
         .get("about_repo")
         .unwrap_or(&Value::Null)
