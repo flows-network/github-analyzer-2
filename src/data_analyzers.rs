@@ -596,6 +596,12 @@ pub async fn aggregate_commits(
                 raw_commits_vec.push(tup);
 
                 processed_count += 1;
+                let elapsed = start_time.elapsed();
+                log::info!(
+                    "Time elapsed in getting 1 commit : {} seconds",
+                    elapsed.as_secs(),
+                );
+            
             }
             Err(_e) => {
                 log::error!(
