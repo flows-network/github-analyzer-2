@@ -447,7 +447,8 @@ pub async fn analyze_issue_integrated(
         }
     }
 } */
-pub async fn get_commit(
+
+/* pub async fn get_commit(
     user_name: &str,
     tag_line: &str,
     url: &str,
@@ -469,7 +470,10 @@ pub async fn get_commit(
         .method(http_req::request::Method::GET)
         .header("User-Agent", "flows-network connector")
         .header("Content-Type", "plain/text")
-        .header("Authorization", &format!("Bearer {}", token.unwrap_or_default()))
+        .header(
+            "Authorization",
+            &format!("Bearer {}", token.unwrap_or_default()),
+        )
         .send(&mut writer)
     {
         Ok(res) => {
@@ -521,6 +525,70 @@ pub async fn get_commit(
     //     .await?;
 
     // let text = response.text().await?;
+} */
+
+pub async fn get_commit(
+    user_name: &str,
+    tag_line: &str,
+    url: &str,
+    _turbo: bool,
+    is_sparce: bool,
+    token: Option<String>,
+) -> anyhow::Result<(String, String)> {
+    use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE, AUTHORIZATION};
+
+    let token_str = match token {
+        None => String::new(),
+        Some(ref t) => format!("&token={}", t.as_str()),
+    };
+
+    let commit_patch_str = format!("{url}.patch{token_str}");
+
+    let github_token = std::env::var("GITHUB_TOKEN").unwrap();
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_static("flows-network connector"),
+    );
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("plain/text"));
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {}", github_token))?,
+    );
+
+    let client = reqwest::Client::new();
+    let response = client.get(url).headers(headers).send().await?;
+
+    if !response.status().is_success() {
+        log::error!("GitHub HTTP error: {}", response.status());
+        return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
+    }
+
+    let text = response.text().await?;
+
+    let sys_prompt_1 = &format!(
+        "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
+    );
+
+    let stripped_texts = if !is_sparce {
+        let stripped_texts = text
+            .splitn(2, "diff --git")
+            .nth(0)
+            .unwrap_or("")
+            .to_string();
+
+        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+    } else {
+        text.chars().take(24_000).collect::<String>()
+    };
+
+    let usr_prompt_1 = &format!(
+        "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
+    );
+
+    return Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()));
 }
 
 pub async fn process_commits(
@@ -601,7 +669,6 @@ pub async fn aggregate_commits(
                     "Time elapsed in getting 1 commit : {} seconds",
                     elapsed.as_secs(),
                 );
-            
             }
             Err(_e) => {
                 log::error!(
