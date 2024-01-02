@@ -558,7 +558,7 @@ pub async fn get_commit(
     );
 
     let client = reqwest::Client::new();
-    let response = client.get(url).headers(headers).send().await?;
+    let response = client.get(commit_patch_str).headers(headers).send().await?;
 
     if !response.status().is_success() {
         log::error!("GitHub HTTP error: {}", response.status());
