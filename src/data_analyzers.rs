@@ -556,6 +556,7 @@ pub async fn get_commit(
         AUTHORIZATION,
         HeaderValue::from_str(&format!("Bearer {}", github_token))?,
     );
+   headers.insert(CONNECTION, HeaderValue::from_static("close"));
 
     let client = reqwest::Client::new();
     let response = client.get(commit_patch_str).headers(headers).send().await?;
