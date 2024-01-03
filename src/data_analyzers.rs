@@ -559,14 +559,17 @@ pub async fn get_commit(
    headers.insert(CONNECTION, HeaderValue::from_static("close"));
 
     let client = reqwest::Client::new();
-    let response = client.get(commit_patch_str).headers(headers).send().await?;
+    // let response = client.get(commit_patch_str).headers(headers).send().await?;
 
-    if !response.status().is_success() {
-        log::error!("GitHub HTTP error: {}", response.status());
-        return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
-    }
+    // if !response.status().is_success() {
+    //     log::error!("GitHub HTTP error: {}", response.status());
+    //     return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
+    // }
 
-    let text = response.text().await?;
+    // let text = response.text().await?;
+
+
+    let text = web_scraper_flows::get_page_text(&commit_patch_str).await.unwrap_or("empty".to_string());
 
     let sys_prompt_1 = &format!(
         "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
