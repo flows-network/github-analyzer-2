@@ -535,7 +535,7 @@ pub async fn get_commit(
     is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<(String, String)> {
-    use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE, AUTHORIZATION};
+    // use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE, AUTHORIZATION};
 
     let token_str = match token {
         None => String::new(),
@@ -546,29 +546,48 @@ pub async fn get_commit(
 
     let github_token = std::env::var("GITHUB_TOKEN").unwrap();
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        USER_AGENT,
-        HeaderValue::from_static("flows-network connector"),
+    //     let mut headers = HeaderMap::new();
+    //     headers.insert(
+    //         USER_AGENT,
+    //         HeaderValue::from_static("flows-network connector"),
+    //     );
+    //     headers.insert(CONTENT_TYPE, HeaderValue::from_static("plain/text"));
+    //     headers.insert(
+    //         AUTHORIZATION,
+    //         HeaderValue::from_str(&format!("Bearer {}", github_token))?,
+    //     );
+    //    headers.insert(CONNECTION, HeaderValue::from_static("close"));
+
+    //     let client = reqwest::Client::new();
+    //     let response = client.get(commit_patch_str).headers(headers).send().await?;
+
+    //     if !response.status().is_success() {
+    //         log::error!("GitHub HTTP error: {}", response.status());
+    //         return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
+    //     }
+
+    //     let text = response.text().await?;
+    use hyper::Client;
+    let https = wasmedge_hyper_rustls::connector::new_https_connector(
+        wasmedge_rustls_api::ClientConfig::default(),
     );
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("plain/text"));
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", github_token))?,
-    );
-   headers.insert(CONNECTION, HeaderValue::from_static("close"));
+    let client = Client::builder().build::<_, hyper::Body>(https);
 
-    let client = reqwest::Client::new();
-    let response = client.get(commit_patch_str).headers(headers).send().await?;
+    let uri = hyper::Uri::try_from(commit_patch_str.as_str()).expect(&format!(
+        "Error generating URI from {:?}",
+        commit_patch_str
+    ));
+    let res = client.get(uri).await?;
 
-    if !response.status().is_success() {
-        log::error!("GitHub HTTP error: {}", response.status());
-        return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
-    }
+    log::info!("Response: {}", res.status());
+    log::info!("Headers: {:#?}\n", res.headers());
 
-    let text = response.text().await?;
-
-
+    let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
+    let text = match String::from_utf8(body.to_vec()) {
+        Ok(text) => text,
+        Err(_) => "failed to read body".to_string(),
+    };
+    
     // let text = web_scraper_flows::get_page_text(&commit_patch_str).await.unwrap_or("empty".to_string());
 
     let sys_prompt_1 = &format!(
