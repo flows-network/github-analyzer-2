@@ -592,10 +592,15 @@ pub async fn get_commit(
 
     let mut text = String::new();
 
-    match github_http_get(&commit_patch_str).await {
-        Ok(w) => text = String::from_utf8(w)?,
+    match fetch_commit_patch(commit_patch_str).await {
+        Ok(w) => text = w,
         Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
     }
+
+    // match github_http_get(&commit_patch_str).await {
+    //     Ok(w) => text = String::from_utf8(w)?,
+    //     Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
+    // }
 
     let sys_prompt_1 = &format!(
         "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
@@ -619,6 +624,16 @@ pub async fn get_commit(
     );
 
     return Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()));
+}
+
+async fn fetch_commit_patch(commit_patch_str: String) -> anyhow::Result<String> {
+    let response = reqwest::get(&commit_patch_str).await?;
+    if response.status().is_success() {
+        let text = response.text().await?;
+        Ok(text)
+    } else {
+        Err(anyhow::anyhow!("HTTP error: {}", response.status()))
+    }
 }
 
 pub async fn process_commits(
