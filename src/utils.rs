@@ -401,6 +401,7 @@ pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
         .header("User-Agent", "flows-network connector")
         .header("Content-Type", "application/json")
         .header("Authorization", &format!("Bearer {}", token))
+        .header("CONNECTION", "close")
         .send(&mut writer)
     {
         Ok(res) => {
