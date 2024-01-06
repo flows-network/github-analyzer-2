@@ -683,33 +683,49 @@ pub async fn process_commits(
     Some(commits_summaries)
 }
 
+
 pub async fn aggregate_commits(
     inp_vec: Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
     token: Option<String>,
-) -> anyhow::Result::<Vec<(String, String)>> {
-    use futures::future::try_join_all;
-    use tokio::time::Instant;
-    let start_time = Instant::now();
+) -> anyhow::Result<Vec<(String, String)>> {
+ use futures::future::try_join_all;
+use tokio::time::Instant;
+   let start_time = Instant::now();
 
-    let commit_futures = inp_vec.iter().map(|commit_obj| {
+    let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
         let token = token.clone(); // Clone the token for each future
-        let commit_obj = commit_obj.clone(); // Clone commit_obj to move into the async closure
         async move {
-            get_commit(
-                &commit_obj.name,
-                &commit_obj.tag_line,
-                &commit_obj.source_url,
-                _turbo,
-                is_sparce,
-                token,
-            )
-            .await
-        }
-    });
+            let user_name: &str = &commit_obj.name;
+            let tag_line: &str = &commit_obj.tag_line;
+            let url: &str = &commit_obj.source_url;
+            
+            let token_str = match &token {
+                None => String::new(),
+                Some(t) => format!("&token={}", t),
+            };
+            let commit_patch_str = format!("{url}.patch{token_str}");
+            let stripped_texts = match github_http_get(&commit_patch_str).await {
+                Ok(w) => String::from_utf8(w)?,
+                Err(e) => {
+                    log::error!("Error getting response from Github: {:?}", e);
+                    return Err(e.into()); // Convert the error into the desired error type (e.g., anyhow::Error)
+                },
+            };
+            let sys_prompt_1 = format!(
+                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
+            );
 
-    let results = try_join_all(commit_futures).await;
+            let usr_prompt_1 = format!(
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
+            );
+            
+            Ok((sys_prompt_1, usr_prompt_1))
+        }
+    }).collect();
+
+    let results: Result<Vec<_>, _> = try_join_all(commit_futures).await;
 
     let elapsed = start_time.elapsed();
     log::info!(
@@ -719,6 +735,9 @@ pub async fn aggregate_commits(
 
     results
 }
+
+
+
 
 /* pub async fn aggregate_commits(
     inp_vec: &mut Vec<GitMemory>,
