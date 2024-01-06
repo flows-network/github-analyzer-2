@@ -56,7 +56,7 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(&mut commits_vec, _turbo, is_sparce, token.clone()).await {
+                match process_commits(commits_vec, _turbo, is_sparce, token.clone()).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }

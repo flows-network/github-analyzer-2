@@ -637,7 +637,7 @@ async fn fetch_commit_patch(commit_patch_str: String) -> anyhow::Result<String> 
 }
 
 pub async fn process_commits(
-    inp_vec: &mut Vec<GitMemory>,
+    inp_vec: Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
     token: Option<String>,
@@ -647,26 +647,26 @@ pub async fn process_commits(
     use tokio::time::Instant;
     let start_time = Instant::now();
 
-    let raw_commits_vec = aggregate_commits(inp_vec, _turbo, is_sparce, token).await;
     let elapsed = start_time.elapsed();
     log::info!(
         "Time elapsed in aggregate_commits  is: {} seconds",
         elapsed.as_secs(),
     );
-
-    for (sys_prompt, user_prompt) in raw_commits_vec {
-        let chat_start_time = Instant::now(); // Start timing for chat_inner
-        match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
-            Ok(summary) => {
-                let chat_elapsed = chat_start_time.elapsed(); // Time for chat_inner
-                processed_count += 1;
-                commits_summaries.push_str(&format!("{}\n", summary));
-                log::info!(
-                    "Time elapsed for this summary: {:.2} seconds",
-                    chat_elapsed.as_secs_f32()
-                );
+    if let Ok(raw_commits_vec) = aggregate_commits(inp_vec, _turbo, is_sparce, token).await {
+        for (sys_prompt, user_prompt) in raw_commits_vec {
+            let chat_start_time = Instant::now(); // Start timing for chat_inner
+            match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
+                Ok(summary) => {
+                    let chat_elapsed = chat_start_time.elapsed(); // Time for chat_inner
+                    processed_count += 1;
+                    commits_summaries.push_str(&format!("{}\n", summary));
+                    log::info!(
+                        "Time elapsed for this summary: {:.2} seconds",
+                        chat_elapsed.as_secs_f32()
+                    );
+                }
+                Err(e) => log::error!("Error generating issue summary: {}", e),
             }
-            Err(e) => log::error!("Error generating issue summary: {}", e),
         }
     }
 
@@ -684,6 +684,43 @@ pub async fn process_commits(
 }
 
 pub async fn aggregate_commits(
+    inp_vec: Vec<GitMemory>,
+    _turbo: bool,
+    is_sparce: bool,
+    token: Option<String>,
+) -> anyhow::Result::<Vec<(String, String)>> {
+    use futures::future::try_join_all;
+    use tokio::time::Instant;
+    let start_time = Instant::now();
+
+    let commit_futures = inp_vec.iter().map(|commit_obj| {
+        let token = token.clone(); // Clone the token for each future
+        let commit_obj = commit_obj.clone(); // Clone commit_obj to move into the async closure
+        async move {
+            get_commit(
+                &commit_obj.name,
+                &commit_obj.tag_line,
+                &commit_obj.source_url,
+                _turbo,
+                is_sparce,
+                token,
+            )
+            .await
+        }
+    });
+
+    let results = try_join_all(commit_futures).await;
+
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in aggregating commits: {} seconds",
+        elapsed.as_secs(),
+    );
+
+    results
+}
+
+/* pub async fn aggregate_commits(
     inp_vec: &mut Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
@@ -736,7 +773,7 @@ pub async fn aggregate_commits(
     );
 
     raw_commits_vec
-}
+} */
 
 pub async fn correlate_commits_issues_discussions(
     _profile_data: Option<&str>,
