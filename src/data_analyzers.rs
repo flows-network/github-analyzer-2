@@ -544,7 +544,7 @@ pub async fn get_commit(
 
     let commit_patch_str = format!("{url}.patch{token_str}");
 
-    let github_token = std::env::var("GITHUB_TOKEN").unwrap();
+    // let github_token = std::env::var("GITHUB_TOKEN").unwrap();
 
     //     let mut headers = HeaderMap::new();
     //     headers.insert(
@@ -567,28 +567,35 @@ pub async fn get_commit(
     //     }
 
     //     let text = response.text().await?;
-    use hyper::Client;
-    let https = wasmedge_hyper_rustls::connector::new_https_connector(
-        wasmedge_rustls_api::ClientConfig::default(),
-    );
-    let client = Client::builder().build::<_, hyper::Body>(https);
+    // use hyper::Client;
+    // let https = wasmedge_hyper_rustls::connector::new_https_connector(
+    //     wasmedge_rustls_api::ClientConfig::default(),
+    // );
+    // let client = Client::builder().build::<_, hyper::Body>(https);
 
-    let uri = hyper::Uri::try_from(commit_patch_str.as_str()).expect(&format!(
-        "Error generating URI from {:?}",
-        commit_patch_str
-    ));
-    let res = client.get(uri).await?;
+    // let uri = hyper::Uri::try_from(commit_patch_str.as_str()).expect(&format!(
+    //     "Error generating URI from {:?}",
+    //     commit_patch_str
+    // ));
+    // let res = client.get(uri).await?;
 
-    log::info!("Response: {}", res.status());
-    log::info!("Headers: {:#?}\n", res.headers());
+    // log::info!("Response: {}", res.status());
+    // log::info!("Headers: {:#?}\n", res.headers());
 
-    let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
-    let text = match String::from_utf8(body.to_vec()) {
-        Ok(text) => text,
-        Err(_) => "failed to read body".to_string(),
-    };
-    
+    // let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
+    // let text = match String::from_utf8(body.to_vec()) {
+    //     Ok(text) => text,
+    //     Err(_) => "failed to read body".to_string(),
+    // };
+
     // let text = web_scraper_flows::get_page_text(&commit_patch_str).await.unwrap_or("empty".to_string());
+
+    let mut text = String::new();
+
+    match github_http_get(url).await {
+        Ok(w) => text = String::from_utf8_lossy(&w).to_string(),
+        Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
+    }
 
     let sys_prompt_1 = &format!(
         "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."

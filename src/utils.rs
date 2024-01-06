@@ -358,3 +358,61 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
 
     Ok(output)
 }
+
+pub async fn github_http_post_gql(query: &str) -> anyhow::Result<Vec<u8>> {
+    use http_req::{request::Method, request::Request, uri::Uri};
+    let token = std::env::var("GITHUB_TOKEN").expect("github_token is required");
+    let base_url = "https://api.github.com/graphql";
+    let base_url = Uri::try_from(base_url).unwrap();
+    let mut writer = Vec::new();
+
+    let query = serde_json::json!({"query": query});
+    match Request::new(&base_url)
+        .method(Method::POST)
+        .header("User-Agent", "flows-network connector")
+        .header("Content-Type", "application/json")
+        .header("Authorization", &format!("Bearer {}", token))
+        .header("Content-Length", &query.to_string().len())
+        .body(&query.to_string().into_bytes())
+        .send(&mut writer)
+    {
+        Ok(res) => {
+            if !res.status_code().is_success() {
+                log::error!("Github http error {:?}", res.status_code());
+                return Err(anyhow::anyhow!("Github http error {:?}", res.status_code()));
+            };
+            Ok(writer)
+        }
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+            Err(anyhow::anyhow!(_e))
+        }
+    }
+}
+
+pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
+    use http_req::{request::Method, request::Request, uri::Uri};
+    let token = std::env::var("GITHUB_TOKEN").expect("github_token is required");
+    let mut writer = Vec::new();
+    let url = Uri::try_from(url).unwrap();
+
+    match Request::new(&url)
+        .method(Method::GET)
+        .header("User-Agent", "flows-network connector")
+        .header("Content-Type", "application/json")
+        .header("Authorization", &format!("Bearer {}", token))
+        .send(&mut writer)
+    {
+        Ok(res) => {
+            if !res.status_code().is_success() {
+                log::error!("Github http error {:?}", res.status_code());
+                return Err(anyhow::anyhow!("Github http error {:?}", res.status_code()));
+            };
+            Ok(writer)
+        }
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+            Err(anyhow::anyhow!(_e))
+        }
+    }
+}
