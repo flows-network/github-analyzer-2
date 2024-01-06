@@ -592,8 +592,8 @@ pub async fn get_commit(
 
     let mut text = String::new();
 
-    match github_http_get(url).await {
-        Ok(w) => text = String::from_utf8_lossy(&w).to_string(),
+    match github_http_get(&commit_patch_str).await {
+        Ok(w) => text = String::from_utf8(w)?,
         Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
     }
 
