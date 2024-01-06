@@ -706,8 +706,8 @@ use tokio::time::Instant;
                 Some(t) => format!("&token={}", t),
             };
             let commit_patch_str = format!("{url}.patch{token_str}");
-            let stripped_texts = match github_http_get(&commit_patch_str).await {
-                Ok(w) => String::from_utf8(w)?,
+            let stripped_texts = match fetch_commit_patch(commit_patch_str).await {
+                Ok(w) => w,
                 Err(e) => {
                     log::error!("Error getting response from Github: {:?}", e);
                     return Err(e.into()); // Convert the error into the desired error type (e.g., anyhow::Error)
