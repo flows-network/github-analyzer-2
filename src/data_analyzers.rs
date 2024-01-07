@@ -343,9 +343,11 @@ pub async fn analyze_issue_integrated(
         None => String::new(),
         Some(t) => format!("&token={}", t.as_str()),
     };
+
+    let route = issue_url.clone().replace("https://api.github.com/", "");
     let url_str = format!(
         "{}/comments?&sort=updated&order=desc&per_page=100{}",
-        issue_url, token_str
+        route, token_str
     );
 
     let octocrab = get_octo(&GithubLogin::Default);
