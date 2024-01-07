@@ -694,6 +694,8 @@ pub async fn aggregate_commits(
 use tokio::time::Instant;
    let start_time = Instant::now();
 
+   let octorab = get_octo(&GithubLogin::Default);
+
     let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
         let token = token.clone(); // Clone the token for each future
         async move {
@@ -706,8 +708,8 @@ use tokio::time::Instant;
                 Some(t) => format!("&token={}", t),
             };
             let commit_patch_str = format!("{url}.patch{token_str}");
-            let stripped_texts = match fetch_commit_patch(commit_patch_str).await {
-                Ok(w) => w,
+            let stripped_texts = match octorab.get::<String, _, ()>(&commit_patch_str, None::<&()>).await {
+                Ok(w) => {log::info!("w: {:?}", w.clone()); w},
                 Err(e) => {
                     log::error!("Error getting response from Github: {:?}", e);
                     return Err(e.into()); // Convert the error into the desired error type (e.g., anyhow::Error)
