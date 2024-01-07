@@ -690,11 +690,9 @@ pub async fn aggregate_commits(
     is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<Vec<(String, String)>> {
- use futures::future::try_join_all;
+ use futures::future::join_all;
 use tokio::time::Instant;
    let start_time = Instant::now();
-
-   let octorab = get_octo(&GithubLogin::Default);
 
     let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
         let token = token.clone(); // Clone the token for each future
@@ -708,11 +706,11 @@ use tokio::time::Instant;
                 Some(t) => format!("&token={}", t),
             };
             let commit_patch_str = format!("{url}.patch{token_str}");
-            let stripped_texts = match octorab.get::<String, _, ()>(&commit_patch_str, None::<&()>).await {
-                Ok(w) => {log::info!("w: {:?}", w.clone()); w},
+            let stripped_texts = match github_http_get(&commit_patch_str).await {
+                Ok(w) => String::from_utf8(w).ok()?,
                 Err(e) => {
                     log::error!("Error getting response from Github: {:?}", e);
-                    return Err(e.into()); // Convert the error into the desired error type (e.g., anyhow::Error)
+                    return None; // Convert the error into the desired error type (e.g., anyhow::Error)
                 },
             };
             let sys_prompt_1 = format!(
@@ -723,19 +721,20 @@ use tokio::time::Instant;
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
             
-            Ok((sys_prompt_1, usr_prompt_1))
+            Some((sys_prompt_1, usr_prompt_1))
         }
     }).collect();
 
-    let results: Result<Vec<_>, _> = try_join_all(commit_futures).await;
+    let results = join_all(commit_futures).await;
 
+    let successful_results: Vec<(String, String)> = results.into_iter().flatten().collect();
     let elapsed = start_time.elapsed();
     log::info!(
         "Time elapsed in aggregating commits: {} seconds",
         elapsed.as_secs(),
     );
 
-    results
+    Ok(successful_results)
 }
 
 
