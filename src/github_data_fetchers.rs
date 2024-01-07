@@ -174,7 +174,6 @@ pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<Strin
     None
 }
 
-
 pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
     #[derive(Debug, Deserialize)]
     struct GithubUser {
@@ -459,9 +458,14 @@ pub async fn get_commits_in_range(
         None => String::from(""),
         Some(t) => format!("&token={}", t.as_str()),
     };
-    let base_commit_url = format!("repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+    let author_str = match &user_name {
+        None => String::from(""),
+        Some(t) => format!("&author={}", t.as_str()),
+    };
+    let base_commit_url =
+        format!("repos/{owner}/{repo}/commits?{author_str}&sort=desc&per_page=100{token_str}");
     // let base_commit_url =
-    //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
+    //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&author={author}&sort=desc&per_page=100{token_str}");
     use tokio::time::Instant;
     let start_time = Instant::now();
 
