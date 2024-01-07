@@ -182,6 +182,57 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
 pub async fn process_issues(
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
+    issues_map: &mut HashMap<String, String>,
+    token: Option<String>,
+) -> anyhow::Result<()> {
+    use futures::future::join_all;
+
+    let start_time = Instant::now();
+
+    let issue_futures: Vec<_> = inp_vec
+        .into_iter()
+        .map(|issue| {
+            let target_person = target_person.clone();
+            let token = token.clone();
+            async move {
+                let (summary, gm) = analyze_issue_integrated(&issue, target_person, token)
+                    .await
+                    .ok()?;
+                Some((gm.user_name, summary))
+            }
+        })
+        .collect();
+
+    let results = join_all(issue_futures).await;
+
+    for result in results.into_iter().flatten() {
+        let (user_name, summary) = result;
+
+        issues_map
+            .entry(user_name.clone()) // Clone the user_name for the HashMap key
+            .and_modify(|current_summary| {
+                current_summary.push('\n'); // Use push for a single character
+                current_summary.push_str(&summary);
+            })
+            .or_insert(summary);
+    }
+
+    if count == 0 {
+        anyhow::bail!("No issues processed");
+    }
+
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in processing issues is: {} seconds",
+        elapsed.as_secs(),
+    );
+
+    Ok(())
+}
+
+/* pub async fn process_issues(
+    inp_vec: Vec<Issue>,
+    target_person: Option<String>,
     token: Option<String>,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     use futures::future::join_all;
@@ -196,9 +247,7 @@ pub async fn process_issues(
             let target_person = target_person.clone();
             let token = token.clone();
             async move {
-                match analyze_issue_integrated(&issue, target_person, token)
-                    .await
-                {
+                match analyze_issue_integrated(&issue, target_person, token).await {
                     Err(_e) => None,
                     Ok((summary, gm)) => Some((summary, gm)),
                 }
@@ -229,7 +278,7 @@ pub async fn process_issues(
     );
 
     Some((issues_summaries, count, git_memory_vec))
-}
+} */
 
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
@@ -359,36 +408,47 @@ pub async fn analyze_issue_integrated(
         }
     }
 }
-
-
 pub async fn process_commits(
     inp_vec: Vec<GitMemory>,
+    commits_map: &mut HashMap<String, String>,
     token: Option<String>,
-) -> Option<String> {
-    let mut commits_summaries = String::new();
-    let mut processed_count = 0; // Number of processed entries
+) -> anyhow::Result<()> {
+    use futures::future::join_all;
+    let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
+        let url = format!("{}.patch{}", commit_obj.source_url, token_query);
+        async move {
+            let response = github_http_get(&url).await?;
+            let stripped_texts = String::from_utf8(response)?.chars().take(24_000).collect::<String>();
 
-    if let Ok(raw_commits_vec) = aggregate_commits(inp_vec, token).await {
-        for (sys_prompt, user_prompt) in raw_commits_vec {
-            match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
-                Ok(summary) => {
-                    processed_count += 1;
-                    commits_summaries.push_str(&format!("{}\n", summary));
-                }
-                Err(e) => log::error!("Error generating issue summary: {}", e),
-            }
+            let sys_prompt_1 = format!(
+                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
+            );
+
+            let usr_prompt_1 = format!(
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
+            );
+        let summary = chat_inner(&sys_prompt_1, &usr_prompt_1, 128, "gpt-3.5-turbo-1106").await.ok()?;
+
+            Some((commit_obj.name, summary))
         }
+    }).collect();
+
+    let results = join_all(commit_futures).await;
+    for result in results.into_iter().flatten() {
+        let (user_name, summary) = result;
+        commits_map
+            .entry(user_name.clone()) // Clone the user_name for the HashMap key
+            .and_modify(|current_summary| {
+                current_summary.push('\n'); // Use push for a single character
+                current_summary.push_str(&summary);
+            })
+            .or_insert(summary);
     }
 
-    if processed_count == 0 {
-        log::error!("No commits processed");
-        return None;
-    }
-
-    Some(commits_summaries)
+    Ok(())
 }
 
-pub async fn aggregate_commits(
+/* pub async fn aggregate_commits(
     inp_vec: Vec<GitMemory>,
     token: Option<String>,
 ) -> anyhow::Result<Vec<(String, String)>> {
@@ -400,7 +460,7 @@ pub async fn aggregate_commits(
             let user_name: &str = &commit_obj.name;
             let tag_line: &str = &commit_obj.tag_line;
             let url: &str = &commit_obj.source_url;
-            
+
             let token_str = match &token {
                 None => String::new(),
                 Some(t) => format!("&token={}", t),
@@ -422,7 +482,7 @@ pub async fn aggregate_commits(
             let usr_prompt_1 = format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
-            
+
             Some((sys_prompt_1, usr_prompt_1))
         }
     }).collect();
@@ -432,7 +492,7 @@ pub async fn aggregate_commits(
     let successful_results: Vec<(String, String)> = results.into_iter().flatten().collect();
 
     Ok(successful_results)
-}
+} */
 
 pub async fn correlate_commits_issues_discussions(
     _profile_data: Option<&str>,

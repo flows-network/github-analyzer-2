@@ -13,7 +13,6 @@ use log;
 use serde::Deserialize;
 use serde_json::Value;
 
-
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
     let mut inside_quote = false;
@@ -190,7 +189,6 @@ pub async fn chat_inner(
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
 }
-
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     let parsed: Value = serde_json::from_str(input)?;

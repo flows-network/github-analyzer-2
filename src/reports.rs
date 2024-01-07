@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
 use crate::utils::parse_summary_from_raw_json;
@@ -36,6 +38,7 @@ pub async fn weekly_report(
     let mut issues_count = 0;
 
     let mut commits_summaries = String::new();
+    let mut commits_map = HashMap::<String, String>::new();
     'commits_block: {
         match get_commits_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, mut commits_vec, weekly_commits_vec)) => {
@@ -51,17 +54,14 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(commits_vec, token.clone()).await {
-                    Some(summary) => {
-                        commits_summaries = summary;
-                    }
-                    None => log::error!("processing commits failed"),
-                }
+                process_commits(commits_vec, &mut commits_map, token.clone()).await;
             }
             None => log::error!("failed to get commits"),
         }
     }
     let mut issues_summaries = String::new();
+
+    let mut issues_map = HashMap::<String, String>::new();
 
     'issues_block: {
         match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
@@ -79,12 +79,7 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 issues_count = count;
-                match process_issues(issue_vec, user_name.clone(), token.clone()).await {
-                    Some((summary, _, _issues_vec)) => {
-                        issues_summaries = summary;
-                    }
-                    None => log::error!("processing issues failed"),
-                }
+                process_issues(issue_vec, user_name.clone(), &mut issues_map, token.clone()).await;
             }
             None => log::error!("failed to get issues"),
         }
@@ -136,22 +131,29 @@ pub async fn weekly_report(
             }
         }
     } else {
-        match correlate_commits_issues_discussions(
-            Some(&_profile_data),
-            Some(&commits_summaries),
-            Some(&issues_summaries),
-            Some(&discussion_data),
-            user_name.as_deref(),
-            total_input_entry_count,
-        )
-        .await
-        {
-            None => {
-                report = vec!["no report generated".to_string()];
-            }
-            Some(final_summary) => {
-                if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                    report.push(clean_summary);
+        for (user_name, commits_summaries) in commits_map {
+            let issues_summaries = match issues_map.get(&user_name) {
+                Some(issues_summaries) => issues_summaries.to_owned(),
+                None => "".to_string(),
+            };
+
+            match correlate_commits_issues_discussions(
+                Some(&_profile_data),
+                Some(&commits_summaries),
+                Some(&issues_summaries),
+                Some(&discussion_data),
+                user_name.as_deref(),
+                total_input_entry_count,
+            )
+            .await
+            {
+                None => {
+                    report = vec!["no report generated".to_string()];
+                }
+                Some(final_summary) => {
+                    if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+                        report.push(clean_summary);
+                    }
                 }
             }
         }
