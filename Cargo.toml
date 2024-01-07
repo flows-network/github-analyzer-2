@@ -30,7 +30,7 @@ tiktoken-rs = "0.2.2"
 hyper = "1.1.0"
 snafu = "0.7.5"
 reqwest_wasi = {version = "0.11.16", features = ["json", "wasmedge-tls"]}
-async-openai-wasi = "0.16.4"
+async-openai-wasi = {version = "0.16.4", features = ["wasmedge-tls"]}
 http = "0.2.11"
 hyper_wasi = { version = "0.15", features = ["full"]}
 http-body-util = "0.1.0-rc.2"
