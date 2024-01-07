@@ -187,6 +187,63 @@ pub async fn process_issues(
     is_sparce: bool,
     token: Option<String>,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
+    use futures::future::join_all;
+    use tokio::time::Instant;
+    let mut issues_summaries = String::new();
+    let mut git_memory_vec = Vec::new();
+    let start_time = Instant::now();
+
+    let issue_futures: Vec<_> = inp_vec
+        .into_iter()
+        .map(|issue| {
+            let target_person = target_person.clone();
+            let token = token.clone();
+            async move {
+                match analyze_issue_integrated(&issue, target_person, _turbo, is_sparce, token)
+                    .await
+                {
+                    None => {
+                        log::error!("Error analyzing issue: {:?}", issue.url.to_string());
+                        None
+                    }
+                    Some((summary, gm)) => Some((summary, gm)),
+                }
+            }
+        })
+        .collect();
+
+    let results = join_all(issue_futures).await;
+
+    for (summary, gm) in results.into_iter().flatten() {
+        issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
+        git_memory_vec.push(gm);
+        if git_memory_vec.len() > 40 {
+            break;
+        }
+    }
+
+    let count = git_memory_vec.len();
+    if count == 0 {
+        log::error!("No issues processed");
+        return None;
+    }
+
+    let elapsed = start_time.elapsed();
+    log::info!(
+        "Time elapsed in process issues is: {} seconds",
+        elapsed.as_secs(),
+    );
+
+    Some((issues_summaries, count, git_memory_vec))
+}
+
+/* pub async fn process_issues(
+    inp_vec: Vec<Issue>,
+    target_person: Option<String>,
+    _turbo: bool,
+    is_sparce: bool,
+    token: Option<String>,
+) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
     use tokio::time::Instant;
@@ -230,7 +287,7 @@ pub async fn process_issues(
         elapsed.as_secs(),
     );
     Some((issues_summaries, count, git_memory_vec))
-}
+} */
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
         "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
@@ -683,16 +740,13 @@ pub async fn process_commits(
     Some(commits_summaries)
 }
 
-
 pub async fn aggregate_commits(
     inp_vec: Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<Vec<(String, String)>> {
- use futures::future::join_all;
-use tokio::time::Instant;
-   let start_time = Instant::now();
+    use futures::future::join_all;
 
     let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
         let token = token.clone(); // Clone the token for each future
@@ -713,6 +767,9 @@ use tokio::time::Instant;
                     return None; // Convert the error into the desired error type (e.g., anyhow::Error)
                 },
             };
+            let mut stripped_texts = stripped_texts;
+            stripped_texts.truncate(24_000);
+
             let sys_prompt_1 = format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
@@ -728,72 +785,9 @@ use tokio::time::Instant;
     let results = join_all(commit_futures).await;
 
     let successful_results: Vec<(String, String)> = results.into_iter().flatten().collect();
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in aggregating commits: {} seconds",
-        elapsed.as_secs(),
-    );
 
     Ok(successful_results)
 }
-
-
-
-
-/* pub async fn aggregate_commits(
-    inp_vec: &mut Vec<GitMemory>,
-    _turbo: bool,
-    is_sparce: bool,
-    token: Option<String>,
-) -> Vec<(String, String)> {
-    let mut raw_commits_vec: Vec<(String, String)> = Vec::new();
-    let mut processed_count = 0; // Number of processed entries
-    use tokio::time::Instant;
-    let start_time = Instant::now();
-
-    for commit_obj in inp_vec.iter_mut() {
-        match get_commit(
-            &commit_obj.name,
-            &commit_obj.tag_line,
-            &commit_obj.source_url,
-            _turbo,
-            is_sparce,
-            token.clone(),
-        )
-        .await
-        {
-            Ok(tup) => {
-                raw_commits_vec.push(tup);
-
-                processed_count += 1;
-                let elapsed = start_time.elapsed();
-                log::info!(
-                    "Time elapsed in getting 1 commit : {} seconds",
-                    elapsed.as_secs(),
-                );
-            }
-            Err(_e) => {
-                log::error!(
-                    "Error aggregating commit {:?} for user {}: {:?}",
-                    commit_obj.source_url,
-                    commit_obj.name,
-                    _e
-                );
-            }
-        }
-    }
-
-    if processed_count == 0 {
-        log::error!("No commits processed");
-    }
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in aggregatting commits : {} seconds",
-        elapsed.as_secs(),
-    );
-
-    raw_commits_vec
-} */
 
 pub async fn correlate_commits_issues_discussions(
     _profile_data: Option<&str>,
