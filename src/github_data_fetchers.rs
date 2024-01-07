@@ -4,10 +4,7 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derivative::Derivative;
 use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
 use github_flows::{get_octo, octocrab, GithubLogin};
-use http::header::{HeaderMap, HeaderValue, CONNECTION};
 use serde::{Deserialize, Serialize};
-use serde_json;
-use store_flows::{get, set};
 
 #[derive(Derivative, Serialize, Deserialize, Debug, Clone)]
 pub struct GitMemory {
@@ -176,34 +173,7 @@ pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<Strin
     }
     None
 }
-pub async fn is_code_contributor(owner: &str, repo: &str, user_name: &str) -> bool {
-    use std::hash::Hasher;
-    use twox_hash::XxHash;
-    let repo_string = format!("{owner}/{repo}");
-    let mut hasher = XxHash::with_seed(0);
-    hasher.write(repo_string.as_bytes());
-    let hash = hasher.finish();
-    let key = &format!("{:x}", hash);
-    match get(key)
-        .and_then(|val| serde_json::from_value::<std::collections::HashSet<String>>(val).ok())
-    {
-        Some(set) => set.contains(user_name),
-        None => match get_contributors(owner, repo).await {
-            Ok(contributors) => {
-                set(
-                    key,
-                    serde_json::to_value(contributors.clone()).unwrap_or_default(),
-                    None,
-                );
-                return contributors.contains(&user_name.to_owned());
-            }
-            Err(_e) => {
-                log::error!("Github contributors not found: {:?}", _e);
-                return false;
-            }
-        },
-    }
-}
+
 
 pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
     #[derive(Debug, Deserialize)]

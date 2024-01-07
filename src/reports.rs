@@ -46,7 +46,6 @@ pub async fn weekly_report(
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-                // send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
                 let mut is_sparce = false;
                 let mut _turbo = false;
                 match count {
@@ -72,7 +71,6 @@ pub async fn weekly_report(
 
                     commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
                 }
-                // send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
             }
             None => log::error!("failed to get commits"),
         }
@@ -89,7 +87,6 @@ pub async fn weekly_report(
                     .join("\n");
 
                 report.push(format!("found {count} issues:\n{issues_str}"));
-                // send_message_to_channel("ik8", "ch_iss", issues_str.to_string()).await;
 
                 let mut is_sparce = false;
                 let mut _turbo = false;
@@ -111,7 +108,6 @@ pub async fn weekly_report(
                 .await
                 {
                     Some((summary, _, _issues_vec)) => {
-                        // send_message_to_channel("ik8", "ch_err", summary.clone()).await;
                         issues_summaries = summary;
                     }
                     None => log::error!("processing issues failed"),
@@ -145,7 +141,7 @@ pub async fn weekly_report(
             report.push(format!(
                 "{count} discussions were referenced in analysis:\n {discussions_str}"
             ));
-            // send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
+
             discussion_data = summary;
         }
         Err(_e) => log::error!("failed to get discussions for {owner}/{repo}: {_e}"),
@@ -181,13 +177,6 @@ pub async fn weekly_report(
                 report = vec!["no report generated".to_string()];
             }
             Some(final_summary) => {
-                slack_flows::send_message_to_channel(
-                    "ik8",
-                    "ch_err",
-                    format!("{:?}", final_summary),
-                )
-                .await;
-
                 if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
                     report.push(clean_summary);
                 }
@@ -198,67 +187,4 @@ pub async fn weekly_report(
     report.join("\n")
 }
 
-/*
-pub async fn new_contributor_report(github_token: &str, owner: &str, repo: &str, user_name: &str) -> Option<String> {
-    let mut home_repo_data = get_readme(owner, repo).await.unwrap_or("".to_string());
-    match get_community_profile_data(owner, repo).await {
-        Some(community_profile_data) => {
-            home_repo_data.push_str(&community_profile_data);
-        }
-        None => {}
-    };
-    send_message_to_channel("ik8", "ch_home", home_repo_data.clone()).await;
-    let user_profile = get_user_data_by_login(user_name)
-        .await
-        .unwrap_or("".to_string());
-    send_message_to_channel("ik8", "ch_pro", user_profile.clone()).await;
 
-    let now = Utc::now();
-    let a_week_ago = now - Duration::days(7);
-    let a_week_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-    // current search result may include issues the user interacted much earlier but updated recently
-    // may need to do 2 separate searches: "commenter:juntao updated:>2023-07-30T02:49:06Z"
-    let issue_query = format!("involves:{user_name} updated:>{a_week_ago_str}");
-    let issues_data = search_issue(&issue_query).await.unwrap_or("".to_string());
-    let mut repos_data = String::new();
-
-    for language in vec!["rust", "javascript", "cpp", "go"] {
-        let temp = get_user_repos_gql(user_name, language)
-            .await
-            .unwrap_or("".to_string());
-        repos_data.push_str(&temp);
-    }
-    send_message_to_channel("ik8", "ch_rep", repos_data.clone()).await;
-
-    let discussion_query = format!("involves:{user_name} updated:>{a_week_ago_str}");
-    let (_, discussion_vec) = search_discussions(&discussion_query).await.unwrap();
-
-    let (discussion_data, _) = analyze_discussions(discussion_vec, Some(user_name)).await;
-    send_message_to_channel("ik8", "ch_dis", discussion_data.clone()).await;
-
-    return correlate_user_and_home_project(
-        &home_repo_data,
-        &user_profile,
-        &issues_data,
-        &repos_data,
-        &discussion_data,
-    )
-    .await;
-}
-pub async fn current_contributor_report(
-    owner: &str,
-    repo: &str,
-    user_name: &str,
-) -> Option<String> {
-    let now = Utc::now();
-    let a_week_ago = now - Duration::days(7);
-    let a_week_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-    // let issue_query = format!("involves:{user_name} updated:>{a_week_ago_str}");
-    // let issues_data = search_issue(&issue_query).await.unwrap_or("".to_string());
-
-    Some("".to_string())
-}
-pub async fn current_repo_report(github_token: &str, owner: &str, repo: &str) -> Option<String> {
-    Some("".to_string())
-}
- */

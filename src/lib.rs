@@ -8,7 +8,6 @@ use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
 use reports::*;
 use serde_json::Value;
-use slack_flows::send_message_to_channel;
 use std::collections::HashMap;
 use std::env;
 use webhook_flows::{create_endpoint, request_handler, send_response};
@@ -94,5 +93,4 @@ async fn handler(
         vec![(String::from("content-type"), String::from("text/plain"))],
         output.as_bytes().to_vec(),
     );
-    // send_message_to_channel("ik8", "ch_err", output.clone()).await;
 }

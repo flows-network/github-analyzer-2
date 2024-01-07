@@ -1,6 +1,6 @@
 [package]
 name = "github-analyzer-2"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [lib]
@@ -17,25 +17,14 @@ http_req_wasi = {version =  "0.11", features = ["wasmedge_rustls"]}
 urlencoding = "2.1.3"
 flowsnet-platform-sdk = "0.1.5"
 log = "0.4.19"
-store-flows = "0.3.1"
 base64 = "0.21.2"
-twox-hash = "1.6.3"
 derivative = "2.2.0"
 chrono = { version = "0.4.26", features = ["serde"] }
 webhook-flows = "0.4.4"
-slack-flows = "0.3.4"
 web-scraper-flows = "0.1.0"
 github-flows = "0.7.0"
 tiktoken-rs = "0.2.2"
-hyper = "1.1.0"
-snafu = "0.7.5"
-reqwest_wasi = {version = "0.11.16", features = ["json", "wasmedge-tls"]}
 async-openai-wasi = {version = "0.16.4", features = ["wasmedge-tls"]}
-http = "0.2.11"
-hyper_wasi = { version = "0.15", features = ["full"]}
-http-body-util = "0.1.0-rc.2"
 tokio_wasi = { version = "1", features = ["rt", "macros", "net", "time", "io-util"]}
-pretty_env_logger = "0.4.0"
 wasmedge_rustls_api = { version = "0.1", features = [ "tokio_async" ] }
-wasmedge_hyper_rustls = "0.1.0"
 futures = "0.3.30"

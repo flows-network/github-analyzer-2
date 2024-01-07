@@ -6,7 +6,6 @@ use github_flows::{
     octocrab::models::{issues::Comment, issues::Issue},
     GithubLogin,
 };
-use http::header::{HeaderMap, HeaderValue, CONNECTION};
 use log;
 use serde::Deserialize;
 
@@ -234,57 +233,6 @@ pub async fn process_issues(
     Some((issues_summaries, count, git_memory_vec))
 }
 
-/* pub async fn process_issues(
-    inp_vec: Vec<Issue>,
-    target_person: Option<String>,
-    _turbo: bool,
-    is_sparce: bool,
-    token: Option<String>,
-) -> Option<(String, usize, Vec<GitMemory>)> {
-    let mut issues_summaries = String::new();
-    let mut git_memory_vec = vec![];
-    use tokio::time::Instant;
-    let start_time = Instant::now();
-
-    for issue in &inp_vec {
-        match analyze_issue_integrated(
-            issue,
-            target_person.clone(),
-            _turbo,
-            is_sparce,
-            token.clone(),
-        )
-        .await
-        {
-            None => {
-                log::error!("Error analyzing issue: {:?}", issue.url.to_string());
-                continue;
-            }
-            Some((summary, gm)) => {
-                issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
-                // slack_flows::send_message_to_channel("ik8", "ch_iss", gm.source_url.to_string())
-                //     .await;
-
-                git_memory_vec.push(gm);
-                if git_memory_vec.len() > 20 {
-                    break;
-                }
-            }
-        }
-    }
-
-    let count = git_memory_vec.len();
-    if count == 0 {
-        log::error!("No issues processed");
-        return None;
-    }
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in process issues is: {} seconds",
-        elapsed.as_secs(),
-    );
-    Some((issues_summaries, count, git_memory_vec))
-} */
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
         "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
@@ -416,260 +364,6 @@ pub async fn analyze_issue_integrated(
     }
 }
 
-/* pub async fn analyze_commit_integrated(
-    user_name: &str,
-    tag_line: &str,
-    url: &str,
-    _turbo: bool,
-    is_sparce: bool,
-    token: Option<String>,
-) -> anyhow::Result<String> {
-    let token_str = match token {
-        None => String::new(),
-        Some(t) => format!("&token={}", t.as_str()),
-    };
-
-    let commit_patch_str = format!("{url}.patch{token_str}");
-    // let url = Url::try_from(commit_patch_str.as_str())
-    //     .expect(&format!("Error generating URI from {:?}", commit_patch_str));
-
-    let octocrab = get_octo(&GithubLogin::Default);
-    let mut headers = HeaderMap::new();
-    headers.insert(CONNECTION, HeaderValue::from_static("close"));
-    let response = octocrab
-        ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
-        .await?;
-
-    let text = response.text().await?;
-
-    let sys_prompt_1 = &format!(
-                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
-            );
-
-    let stripped_texts = if !is_sparce {
-        let stripped_texts = text
-            .splitn(2, "diff --git")
-            .nth(0)
-            .unwrap_or("")
-            .to_string();
-
-        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-    } else {
-        text.chars().take(24_000).collect::<String>()
-    };
-
-    let usr_prompt_1 = &format!(
-                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
-            );
-
-    let sha_serial = match url.rsplitn(2, "/").nth(0) {
-        Some(s) => s.chars().take(5).collect::<String>(),
-        None => "0000".to_string(),
-    };
-    match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
-        Ok(r) => {
-            let out = format!("{} {}", url, r);
-            Ok(out)
-        }
-        Err(_e) => {
-            log::error!("Error generating issue summary #{}: {}", sha_serial, _e);
-            Err(anyhow::anyhow!(
-                "Error generating issue summary #{}: {}",
-                sha_serial,
-                _e
-            ))
-        }
-    }
-} */
-
-/* pub async fn get_commit(
-    user_name: &str,
-    tag_line: &str,
-    url: &str,
-    _turbo: bool,
-    is_sparce: bool,
-    token: Option<String>,
-) -> anyhow::Result<(String, String)> {
-    let token_str = match token {
-        None => String::new(),
-        Some(ref t) => format!("&token={}", t.as_str()),
-    };
-
-    let commit_patch_str = format!("{url}.patch{token_str}");
-
-    let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
-        .expect(&format!("Error generating URI from {:?}", commit_patch_str));
-    let mut writer = Vec::new();
-    match http_req::request::Request::new(&uri)
-        .method(http_req::request::Method::GET)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "plain/text")
-        .header(
-            "Authorization",
-            &format!("Bearer {}", token.unwrap_or_default()),
-        )
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                log::error!("Github http error {:?}", res.status_code());
-                return Err(anyhow::anyhow!("Github http error {:?}", res.status_code()));
-            }
-            let text = String::from_utf8_lossy(writer.as_slice());
-            let sys_prompt_1 = &format!(
-                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
-            );
-
-            let stripped_texts = if !is_sparce {
-                let stripped_texts = text
-                    .splitn(2, "diff --git")
-                    .nth(0)
-                    .unwrap_or("")
-                    .to_string();
-
-                let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-            } else {
-                text.chars().take(24_000).collect::<String>()
-            };
-
-            let usr_prompt_1 = &format!(
-                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
-            );
-
-            return Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()));
-        }
-        Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-            return Err(anyhow::anyhow!(
-                "Error getting response from Github: {:?}",
-                _e
-            ));
-        }
-    };
-    Err(anyhow::anyhow!(
-        "Error getting response from Github: {:?}",
-        "hellow"
-    ))
-    // let octocrab = get_octo(&GithubLogin::Default);
-    // let mut headers = HeaderMap::new();
-    // headers.insert(CONNECTION, HeaderValue::from_static("close"));
-    // let response = octocrab
-    //     ._get_with_headers(commit_patch_str, None::<&()>, Some(headers))
-    //     .await?;
-
-    // let text = response.text().await?;
-} */
-
-pub async fn get_commit(
-    user_name: &str,
-    tag_line: &str,
-    url: &str,
-    _turbo: bool,
-    is_sparce: bool,
-    token: Option<String>,
-) -> anyhow::Result<(String, String)> {
-    // use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT, CONTENT_TYPE, AUTHORIZATION};
-
-    let token_str = match token {
-        None => String::new(),
-        Some(ref t) => format!("&token={}", t.as_str()),
-    };
-
-    let commit_patch_str = format!("{url}.patch{token_str}");
-
-    // let github_token = std::env::var("GITHUB_TOKEN").unwrap();
-
-    //     let mut headers = HeaderMap::new();
-    //     headers.insert(
-    //         USER_AGENT,
-    //         HeaderValue::from_static("flows-network connector"),
-    //     );
-    //     headers.insert(CONTENT_TYPE, HeaderValue::from_static("plain/text"));
-    //     headers.insert(
-    //         AUTHORIZATION,
-    //         HeaderValue::from_str(&format!("Bearer {}", github_token))?,
-    //     );
-    //    headers.insert(CONNECTION, HeaderValue::from_static("close"));
-
-    //     let client = reqwest::Client::new();
-    //     let response = client.get(commit_patch_str).headers(headers).send().await?;
-
-    //     if !response.status().is_success() {
-    //         log::error!("GitHub HTTP error: {}", response.status());
-    //         return Err(anyhow::anyhow!("GitHub HTTP error: {}", response.status()));
-    //     }
-
-    //     let text = response.text().await?;
-    // use hyper::Client;
-    // let https = wasmedge_hyper_rustls::connector::new_https_connector(
-    //     wasmedge_rustls_api::ClientConfig::default(),
-    // );
-    // let client = Client::builder().build::<_, hyper::Body>(https);
-
-    // let uri = hyper::Uri::try_from(commit_patch_str.as_str()).expect(&format!(
-    //     "Error generating URI from {:?}",
-    //     commit_patch_str
-    // ));
-    // let res = client.get(uri).await?;
-
-    // log::info!("Response: {}", res.status());
-    // log::info!("Headers: {:#?}\n", res.headers());
-
-    // let body = hyper::body::to_bytes(res.into_body()).await.unwrap();
-    // let text = match String::from_utf8(body.to_vec()) {
-    //     Ok(text) => text,
-    //     Err(_) => "failed to read body".to_string(),
-    // };
-
-    // let text = web_scraper_flows::get_page_text(&commit_patch_str).await.unwrap_or("empty".to_string());
-
-    let mut text = String::new();
-
-    match fetch_commit_patch(commit_patch_str).await {
-        Ok(w) => text = w,
-        Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
-    }
-
-    // match github_http_get(&commit_patch_str).await {
-    //     Ok(w) => text = String::from_utf8(w)?,
-    //     Err(_e) => log::error!("Error getting response from Github: {:?}", _e),
-    // }
-
-    let sys_prompt_1 = &format!(
-        "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
-    );
-
-    let stripped_texts = if !is_sparce {
-        let stripped_texts = text
-            .splitn(2, "diff --git")
-            .nth(0)
-            .unwrap_or("")
-            .to_string();
-
-        let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-        squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-    } else {
-        text.chars().take(24_000).collect::<String>()
-    };
-
-    let usr_prompt_1 = &format!(
-        "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
-    );
-
-    return Ok((sys_prompt_1.to_string(), usr_prompt_1.to_string()));
-}
-
-async fn fetch_commit_patch(commit_patch_str: String) -> anyhow::Result<String> {
-    let response = reqwest::get(&commit_patch_str).await?;
-    if response.status().is_success() {
-        let text = response.text().await?;
-        Ok(text)
-    } else {
-        Err(anyhow::anyhow!("HTTP error: {}", response.status()))
-    }
-}
 
 pub async fn process_commits(
     inp_vec: Vec<GitMemory>,
@@ -679,26 +373,13 @@ pub async fn process_commits(
 ) -> Option<String> {
     let mut commits_summaries = String::new();
     let mut processed_count = 0; // Number of processed entries
-    use tokio::time::Instant;
-    let start_time = Instant::now();
 
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in aggregate_commits  is: {} seconds",
-        elapsed.as_secs(),
-    );
     if let Ok(raw_commits_vec) = aggregate_commits(inp_vec, _turbo, is_sparce, token).await {
         for (sys_prompt, user_prompt) in raw_commits_vec {
-            let chat_start_time = Instant::now(); // Start timing for chat_inner
             match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
                 Ok(summary) => {
-                    let chat_elapsed = chat_start_time.elapsed(); // Time for chat_inner
                     processed_count += 1;
                     commits_summaries.push_str(&format!("{}\n", summary));
-                    log::info!(
-                        "Time elapsed for this summary: {:.2} seconds",
-                        chat_elapsed.as_secs_f32()
-                    );
                 }
                 Err(e) => log::error!("Error generating issue summary: {}", e),
             }
@@ -709,11 +390,6 @@ pub async fn process_commits(
         log::error!("No commits processed");
         return None;
     }
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in process commits is: {} seconds",
-        elapsed.as_secs(),
-    );
 
     Some(commits_summaries)
 }
@@ -836,17 +512,6 @@ pub async fn correlate_commits_issues_discussions(
         15.. => (1024, 500, 500),
     };
 
-    // let usr_prompt_2 = &format!(
-    //     "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to less than {gen_2_reminder} tokens."
-    // );
-    // let usr_prompt_2 = &format!(
-    //     "If applicable, summarize the key technical contributions made by {target_str} this week in bullet-point format. Address the following points within a token limit of {gen_2_reminder}. If no information is available for a point, leave it blank:
-    //     - Highlight impactful contributions and their interconnections.
-    //     - Explain alignment with the project's goals.
-    //     - Identify recurring patterns or trends.
-    //     - Discuss synergy between individual and collective advancement.
-    //     - Comment objectively on the significance of each contribution."
-    // );
     let usr_prompt_2 = &format!(
         r#"Analyze the key technical contributions made by {target_str} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph. Do not include nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
 
