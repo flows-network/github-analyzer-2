@@ -37,11 +37,12 @@ pub async fn weekly_report(
     let mut commits_count = 0;
     let mut issues_count = 0;
 
-    let mut commits_summaries = String::new();
     let mut commits_map = HashMap::<String, String>::new();
     'commits_block: {
-        match get_commits_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
-            Some((count, mut commits_vec, weekly_commits_vec)) => {
+        match get_commits_in_range_search(owner, repo, user_name.clone(), n_days, token.clone())
+            .await
+        {
+            Some((count, commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
                     .map(|com| com.source_url.to_owned())
@@ -54,12 +55,11 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                process_commits(commits_vec, &mut commits_map, token.clone()).await;
+                let _ = process_commits(commits_vec, &mut commits_map, token.clone()).await;
             }
             None => log::error!("failed to get commits"),
         }
     }
-    let mut issues_summaries = String::new();
 
     let mut issues_map = HashMap::<String, String>::new();
 
@@ -79,7 +79,9 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 issues_count = count;
-                process_issues(issue_vec, user_name.clone(), &mut issues_map, token.clone()).await;
+                let _ =
+                    process_issues(issue_vec, user_name.clone(), &mut issues_map, token.clone())
+                        .await;
             }
             None => log::error!("failed to get issues"),
         }
@@ -91,7 +93,7 @@ pub async fn weekly_report(
 
     let discussion_query = match &user_name {
         Some(user_name) => {
-            format!("repo:{owner}/{repo} involves: {user_name} updated:>{n_days_ago_str}")
+            format!("repo:{owner}/{repo} involves:{user_name} updated:>{n_days_ago_str}")
         }
         None => format!("repo:{owner}/{repo} updated:>{n_days_ago_str}"),
     };
@@ -112,12 +114,12 @@ pub async fn weekly_report(
 
             discussion_data = summary;
         }
-        Err(_e) => log::error!("failed to get discussions for {owner}/{repo}: {_e}"),
+        Err(_e) => log::error!("No discussions involving user found at {owner}/{repo}: {_e}"),
     }
 
     let total_input_entry_count = (commits_count + issues_count) as u16;
 
-    if commits_summaries.is_empty() && issues_summaries.is_empty() && discussion_data.is_empty() {
+    if commits_map.len() == 0 && issues_map.len() == 0 && discussion_data.is_empty() {
         match &user_name {
             Some(target_person) => {
                 report = vec![format!(
@@ -131,6 +133,11 @@ pub async fn weekly_report(
             }
         }
     } else {
+        if commits_map.len() == 0 && issues_map.len() > 0 {
+            report = vec!["No useful data found, nothing to report".to_string()];
+
+            todo!("implement issues-only report generation");
+        }
         for (user_name, commits_summaries) in commits_map {
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(issues_summaries) => issues_summaries.to_owned(),
@@ -142,13 +149,13 @@ pub async fn weekly_report(
                 Some(&commits_summaries),
                 Some(&issues_summaries),
                 Some(&discussion_data),
-                user_name.as_deref(),
+                Some(user_name.as_str()),
                 total_input_entry_count,
             )
             .await
             {
                 None => {
-                    report = vec!["no report generated".to_string()];
+                    // report = vec!["no report generated".to_string()];
                 }
                 Some(final_summary) => {
                     if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {

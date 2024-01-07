@@ -2,14 +2,12 @@ pub mod data_analyzers;
 pub mod github_data_fetchers;
 pub mod reports;
 pub mod utils;
-use data_analyzers::{get_repo_info, get_repo_overview_by_scraper};
+use data_analyzers::get_repo_overview_by_scraper;
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
-use github_data_fetchers::get_user_data_by_login;
 use reports::*;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::env;
 use webhook_flows::{create_endpoint, request_handler, send_response};
 
 #[no_mangle]

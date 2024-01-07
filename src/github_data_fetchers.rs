@@ -1,6 +1,5 @@
-use crate::{reports, utils::*};
-use anyhow::anyhow;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use crate::utils::*;
+use chrono::{DateTime, Duration, Utc};
 use derivative::Derivative;
 use github_flows::octocrab::models::{issues::Comment, issues::Issue, Repository, User};
 use github_flows::{get_octo, octocrab, GithubLogin};
@@ -17,7 +16,6 @@ pub struct GitMemory {
     pub source_url: String,
     #[derivative(Default(value = "String::from(\"\")"))]
     pub payload: String,
-    pub date: NaiveDate,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MemoryType {
@@ -310,8 +308,6 @@ pub async fn get_issues_in_range(
         pub items: Vec<T>,
         pub total_count: Option<u64>,
     }
-    use tokio::time::Instant;
-    let start_time = Instant::now();
 
     let n_days_ago = (Utc::now() - Duration::days(range as i64))
         .format("%Y-%m-%dT%H:%M:%SZ")
@@ -334,7 +330,6 @@ pub async fn get_issues_in_range(
     //     encoded_query
     // );
 
-    let mut issue_vec = vec![];
     let octocrab = get_octo(&GithubLogin::Default);
 
     match octocrab
@@ -343,19 +338,14 @@ pub async fn get_issues_in_range(
     {
         Err(e) => {
             log::error!("error: {:?}", e);
+            None
         }
         Ok(issue_page) => {
-            issue_vec = issue_page.items;
+            // let count = issue_page.total_count.unwrap_or(0);
+            let count = issue_page.items.len();
+            Some((count, issue_page.items))
         }
     }
-    let count = issue_vec.len();
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in get_issues_in_range is: {} seconds",
-        elapsed.as_secs(),
-    );
-
-    Some((count, issue_vec))
 }
 
 pub async fn get_issue_texts(issue: &Issue) -> Option<String> {
@@ -421,8 +411,91 @@ pub async fn get_issue_texts(issue: &Issue) -> Option<String> {
 
     Some(all_text_from_issue)
 }
+pub async fn get_commits_in_range_search(
+    owner: &str,
+    repo: &str,
+    user_name: Option<String>,
+    range: u16,
+    token: Option<String>,
+) -> Option<(usize, Vec<GitMemory>)> {
+    #[derive(Debug, Deserialize)]
+    struct Page<T> {
+        pub items: Vec<T>,
+        pub total_count: Option<u64>,
+    }
 
-pub async fn get_commits_in_range(
+    #[derive(Debug, Deserialize, Serialize, Clone)]
+    struct User {
+        login: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct GithubCommit {
+        sha: String,
+        html_url: String,
+        author: Option<User>, // made nullable
+        commit: CommitDetails,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct CommitDetails {
+        message: String,
+        // committer: CommitUserDetails,
+    }
+    let token_str = match &token {
+        None => String::from(""),
+        Some(t) => format!("&token={}", t.as_str()),
+    };
+    let author_str = match &user_name {
+        None => String::from(""),
+        Some(t) => format!("author:{}", t.as_str()),
+    };
+    let now = Utc::now();
+    let n_days_ago = (now - Duration::days(range as i64)).date_naive();
+
+    let query = format!("repo:{owner}/{repo} {author_str} updated:>{n_days_ago}");
+    let encoded_query = urlencoding::encode(&query);
+
+    let url_str = format!(
+        "search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
+        encoded_query
+    );
+    // let url_str = format!(
+    //     "https://api.github.com/search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
+    //     encoded_query
+    // );
+
+    let mut git_memory_vec = vec![];
+    let octocrab = get_octo(&GithubLogin::Default);
+
+    match octocrab
+        .get::<Page<GithubCommit>, _, ()>(&url_str, None::<&()>)
+        .await
+    {
+        Err(e) => {
+            log::error!("Error parsing commits: {:?}", e);
+        }
+        Ok(commits_page) => {
+            for commit in commits_page.items {
+                if let Some(author) = &commit.author {
+                    git_memory_vec.push(GitMemory {
+                        memory_type: MemoryType::Commit,
+                        name: author.login.clone(),
+                        tag_line: commit.commit.message.clone(),
+                        source_url: commit.html_url.clone(),
+                        payload: String::from(""),
+                    });
+                }
+            }
+        }
+    }
+
+    let count = git_memory_vec.len();
+
+    Some((count, git_memory_vec))
+}
+
+/* pub async fn get_commits_in_range(
     owner: &str,
     repo: &str,
     user_name: Option<String>,
@@ -466,14 +539,24 @@ pub async fn get_commits_in_range(
         format!("repos/{owner}/{repo}/commits?{author_str}&sort=desc&per_page=100{token_str}");
     // let base_commit_url =
     //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&author={author}&sort=desc&per_page=100{token_str}");
-    use tokio::time::Instant;
-    let start_time = Instant::now();
+
+    // let url_str = format!(
+    //     "search/commits?q={}&sort=updated&order=desc&per_page=100{token_str}",
+    //     encoded_query
+    // );
+    // let url_str = format!(
+    //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
+    //     encoded_query
+    // );
 
     let mut git_memory_vec = vec![];
-    let mut weekly_git_memory_vec = vec![];
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
     let octocrab = get_octo(&GithubLogin::Default);
+
+    // match octocrab
+    // .get::<Page<Issue>, _, ()>(&url_str, None::<&()>)
+    // .await
 
     match octocrab
         .get::<Vec<GithubCommit>, _, ()>(&base_commit_url, None::<&()>)
@@ -488,14 +571,7 @@ pub async fn get_commits_in_range(
                     if commit_date.date_naive() <= n_days_ago {
                         continue;
                     }
-                    weekly_git_memory_vec.push(GitMemory {
-                        memory_type: MemoryType::Commit,
-                        name: commit.author.clone().map_or(String::new(), |au| au.login),
-                        tag_line: commit.commit.message.clone(),
-                        source_url: commit.html_url.clone(),
-                        payload: String::from(""),
-                        date: commit_date.date_naive(),
-                    });
+
                     if let Some(user_name) = &user_name {
                         if let Some(author) = &commit.author {
                             if author.login.as_str() == user_name {
@@ -505,7 +581,6 @@ pub async fn get_commits_in_range(
                                     tag_line: commit.commit.message.clone(),
                                     source_url: commit.html_url.clone(),
                                     payload: String::from(""),
-                                    date: commit_date.date_naive(),
                                 });
                             }
                         }
@@ -514,18 +589,11 @@ pub async fn get_commits_in_range(
             }
         }
     }
-    if user_name.is_none() {
-        git_memory_vec = weekly_git_memory_vec.clone();
-    }
-    let count = git_memory_vec.len();
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in get_commits_in_range is: {} seconds",
-        elapsed.as_secs(),
-    );
 
-    Some((count, git_memory_vec, weekly_git_memory_vec))
-}
+    let count = git_memory_vec.len();
+
+    Some((count, git_memory_vec))
+} */
 
 pub async fn get_user_repos_in_language(user: &str, language: &str) -> Option<Vec<Repository>> {
     #[derive(Debug, Deserialize)]
@@ -1271,7 +1339,6 @@ pub async fn search_discussions_integrated(
                             tag_line: title,
                             source_url: source_url,
                             payload: r,
-                            date: date,
                         });
                     }
 

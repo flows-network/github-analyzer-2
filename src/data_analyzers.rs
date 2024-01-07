@@ -8,6 +8,7 @@ use github_flows::{
 };
 use log;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -21,7 +22,6 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     let community_profile_url = format!("repos/{}/community/profile", about_repo);
 
     let mut description = String::new();
-    let mut date = Utc::now().date_naive();
     let octocrab = get_octo(&GithubLogin::Default);
 
     match octocrab
@@ -34,11 +34,7 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
                 .as_ref()
                 .unwrap_or(&String::from(""))
                 .to_string();
-            date = profile
-                .updated_at
-                .as_ref()
-                .unwrap_or(&Utc::now())
-                .date_naive();
+
         }
         Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
     }
@@ -115,7 +111,6 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
     let community_profile_url = format!("repos/{}/{}/community/profile", owner, repo);
 
     let mut description = String::new();
-    let mut date = Utc::now().date_naive();
     let mut has_readme = false;
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -129,11 +124,7 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
                 .as_ref()
                 .unwrap_or(&String::from(""))
                 .to_string();
-            date = profile
-                .updated_at
-                .as_ref()
-                .unwrap_or(&Utc::now())
-                .date_naive();
+
             has_readme = profile
                 .files
                 .readme
@@ -175,7 +166,6 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
         tag_line: description,
         source_url: community_profile_url,
         payload: payload,
-        date: date,
     })
 }
 
@@ -187,8 +177,6 @@ pub async fn process_issues(
 ) -> anyhow::Result<()> {
     use futures::future::join_all;
 
-    let start_time = Instant::now();
-
     let issue_futures: Vec<_> = inp_vec
         .into_iter()
         .map(|issue| {
@@ -198,7 +186,7 @@ pub async fn process_issues(
                 let (summary, gm) = analyze_issue_integrated(&issue, target_person, token)
                     .await
                     .ok()?;
-                Some((gm.user_name, summary))
+                Some((gm.name, summary))
             }
         })
         .collect();
@@ -214,18 +202,12 @@ pub async fn process_issues(
                 current_summary.push('\n'); // Use push for a single character
                 current_summary.push_str(&summary);
             })
-            .or_insert(summary);
+            .or_insert(summary.to_string());
     }
 
-    if count == 0 {
+    if issues_map.len() == 0 {
         anyhow::bail!("No issues processed");
     }
-
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in processing issues is: {} seconds",
-        elapsed.as_secs(),
-    );
 
     Ok(())
 }
@@ -311,7 +293,6 @@ pub async fn analyze_issue_integrated(
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
     let issue_number = issue.number;
-    let issue_date = issue.created_at.date_naive();
 
     let issue_body = match &issue.body {
         Some(body) => squeeze_fit_remove_quoted(body, 400, 0.7),
@@ -393,7 +374,6 @@ pub async fn analyze_issue_integrated(
                 tag_line: issue_title,
                 source_url: source_url,
                 payload: r,
-                date: issue_date,
             };
 
             Ok((out, gm))
@@ -414,16 +394,21 @@ pub async fn process_commits(
     token: Option<String>,
 ) -> anyhow::Result<()> {
     use futures::future::join_all;
+    let token_query = match token {
+        None => String::new(),
+        Some(t) => format!("?token={}", t),
+    };
     let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
+
         let url = format!("{}.patch{}", commit_obj.source_url, token_query);
         async move {
-            let response = github_http_get(&url).await?;
-            let stripped_texts = String::from_utf8(response)?.chars().take(24_000).collect::<String>();
-
+            let response = github_http_get(&url).await.ok()?;
+            let stripped_texts = String::from_utf8(response).ok()?.chars().take(24_000).collect::<String>();
+let user_name = commit_obj.name.clone();
             let sys_prompt_1 = format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
-
+let tag_line = commit_obj.tag_line;
             let usr_prompt_1 = format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );

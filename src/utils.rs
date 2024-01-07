@@ -10,7 +10,6 @@ use async_openai::{
     Client,
 };
 use log;
-use serde::Deserialize;
 use serde_json::Value;
 
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
@@ -114,7 +113,7 @@ pub async fn chain_of_chat(
     let chat = client.chat().create(request).await?;
 
     match chat.choices[0].message.clone().content {
-        Some(res) => {
+        Some(_) => {
             // log::info!("{:?}", res);
         }
         None => return Err(anyhow::anyhow!(error_tag.to_string())),
@@ -150,8 +149,6 @@ pub async fn chat_inner(
     max_token: u16,
     model: &str,
 ) -> anyhow::Result<String> {
-    use tokio::time::Instant;
-    let start_time = Instant::now();
     let client = Client::new();
 
     let messages = vec![
@@ -179,11 +176,6 @@ pub async fn chat_inner(
     match chat.choices[0].message.clone().content {
         Some(res) => {
             // log::info!("{:?}", chat.choices[0].message.clone());
-            // let elapsed = start_time.elapsed();
-            // log::info!(
-            //     "Time elapsed in chat_inner is: {} seconds",
-            //     elapsed.as_secs(),
-            // );
             Ok(res)
         }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
