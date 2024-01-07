@@ -133,11 +133,11 @@ pub async fn weekly_report(
             }
         }
     } else {
-        if commits_map.len() == 0 && issues_map.len() > 0 {
-            report = vec!["No useful data found, nothing to report".to_string()];
+        // if commits_map.len() == 0 && issues_map.len() > 0 {
+        //     report = vec!["No useful data found, nothing to report".to_string()];
 
-            todo!("implement issues-only report generation");
-        }
+        //     todo!("implement issues-only report generation");
+        // }
         for (user_name, commits_summaries) in commits_map {
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(issues_summaries) => issues_summaries.to_owned(),
