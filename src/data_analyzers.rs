@@ -182,8 +182,6 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
 pub async fn process_issues(
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
-    _turbo: bool,
-    is_sparce: bool,
     token: Option<String>,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     use futures::future::join_all;
@@ -198,7 +196,7 @@ pub async fn process_issues(
             let target_person = target_person.clone();
             let token = token.clone();
             async move {
-                match analyze_issue_integrated(&issue, target_person, _turbo, is_sparce, token)
+                match analyze_issue_integrated(&issue, target_person, token)
                     .await
                 {
                     Err(_e) => None,
@@ -259,8 +257,6 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
 pub async fn analyze_issue_integrated(
     issue: &Issue,
     target_person: Option<String>,
-    _turbo: bool,
-    is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<(String, GitMemory)> {
     let issue_creator_name = &issue.user.login;
@@ -367,14 +363,12 @@ pub async fn analyze_issue_integrated(
 
 pub async fn process_commits(
     inp_vec: Vec<GitMemory>,
-    _turbo: bool,
-    is_sparce: bool,
     token: Option<String>,
 ) -> Option<String> {
     let mut commits_summaries = String::new();
     let mut processed_count = 0; // Number of processed entries
 
-    if let Ok(raw_commits_vec) = aggregate_commits(inp_vec, _turbo, is_sparce, token).await {
+    if let Ok(raw_commits_vec) = aggregate_commits(inp_vec, token).await {
         for (sys_prompt, user_prompt) in raw_commits_vec {
             match chat_inner(&sys_prompt, &user_prompt, 128, "gpt-3.5-turbo-1106").await {
                 Ok(summary) => {
@@ -396,8 +390,6 @@ pub async fn process_commits(
 
 pub async fn aggregate_commits(
     inp_vec: Vec<GitMemory>,
-    _turbo: bool,
-    is_sparce: bool,
     token: Option<String>,
 ) -> anyhow::Result<Vec<(String, String)>> {
     use futures::future::join_all;

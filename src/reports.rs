@@ -46,30 +46,16 @@ pub async fn weekly_report(
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-                let mut is_sparce = false;
-                let mut _turbo = false;
                 match count {
                     0 => break 'commits_block,
-                    1..=2 => is_sparce = true,
-                    6.. => _turbo = true,
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(commits_vec, _turbo, is_sparce, token.clone()).await {
+                match process_commits(commits_vec, token.clone()).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }
                     None => log::error!("processing commits failed"),
-                }
-
-                if is_sparce {
-                    let weekly_commits_log = weekly_commits_vec
-                        .iter()
-                        .map(|com| format!("{}: {}", com.name, com.tag_line))
-                        .collect::<Vec<String>>()
-                        .join("\n");
-
-                    commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
                 }
             }
             None => log::error!("failed to get commits"),
@@ -88,25 +74,12 @@ pub async fn weekly_report(
 
                 report.push(format!("found {count} issues:\n{issues_str}"));
 
-                let mut is_sparce = false;
-                let mut _turbo = false;
-
                 match count {
                     0 => break 'issues_block,
-                    1..=2 => is_sparce = true,
-                    4.. => _turbo = true,
                     _ => {}
                 };
                 issues_count = count;
-                match process_issues(
-                    issue_vec,
-                    user_name.clone(),
-                    _turbo,
-                    is_sparce,
-                    token.clone(),
-                )
-                .await
-                {
+                match process_issues(issue_vec, user_name.clone(), token.clone()).await {
                     Some((summary, _, _issues_vec)) => {
                         issues_summaries = summary;
                     }
@@ -186,5 +159,3 @@ pub async fn weekly_report(
 
     report.join("\n")
 }
-
-
