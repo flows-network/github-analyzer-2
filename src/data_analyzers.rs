@@ -202,11 +202,8 @@ pub async fn process_issues(
                 match analyze_issue_integrated(&issue, target_person, _turbo, is_sparce, token)
                     .await
                 {
-                    None => {
-                        log::error!("Error analyzing issue: {:?}", issue.url.to_string());
-                        None
-                    }
-                    Some((summary, gm)) => Some((summary, gm)),
+                    Err(_e) => None,
+                    Ok((summary, gm)) => Some((summary, gm)),
                 }
             }
         })
@@ -317,25 +314,14 @@ pub async fn analyze_issue_integrated(
     _turbo: bool,
     is_sparce: bool,
     token: Option<String>,
-) -> Option<(String, GitMemory)> {
-    let bpe = tiktoken_rs::cl100k_base().unwrap();
-
+) -> anyhow::Result<(String, GitMemory)> {
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
     let issue_number = issue.number;
     let issue_date = issue.created_at.date_naive();
 
     let issue_body = match &issue.body {
-        Some(body) => {
-            squeeze_fit_remove_quoted(body, 400, 0.7)
-
-            // if is_sparce {
-            //     //   let temp =      squeeze_fit_remove_quoted(body, 500, 0.6);
-            //     squeeze_fit_remove_quoted(body, 500, 0.6)
-            // } else {
-            //     squeeze_fit_remove_quoted(body, 400, 0.7)
-            // }
-        }
+        Some(body) => squeeze_fit_remove_quoted(body, 400, 0.7),
         None => "".to_string(),
     };
     let issue_url = issue.url.to_string();
@@ -348,11 +334,11 @@ pub async fn analyze_issue_integrated(
         .collect::<Vec<String>>()
         .join(", ");
 
-    let all_text_from_issue = format!(
+    let mut all_text_from_issue = format!(
         "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
         issue_creator_name, issue_title, labels, issue_body
     );
-    let mut all_text_tokens = bpe.encode_ordinary(&all_text_from_issue);
+
     let token_str = match token {
         None => String::new(),
         Some(t) => format!("&token={}", t.as_str()),
@@ -374,35 +360,21 @@ pub async fn analyze_issue_integrated(
         Ok(comments_obj) => {
             for comment in &comments_obj {
                 let comment_body = match &comment.body {
-                    Some(body) => {
-                        squeeze_fit_remove_quoted(body, 200, 1.0)
-
-                        // if is_sparce {
-                        //     squeeze_fit_remove_quoted(body, 300, 1.0)
-                        // } else {
-                        //     squeeze_fit_remove_quoted(body, 200, 1.0)
-                        // }
-                    }
+                    Some(body) => squeeze_fit_remove_quoted(body, 200, 1.0),
                     None => String::new(),
                 };
                 let commenter = &comment.user.login;
                 let commenter_input = format!("{} commented: {}", commenter, comment_body);
-                let mut commenter_token = bpe.encode_ordinary(&commenter_input);
-                all_text_tokens.append(&mut commenter_token);
-                if is_sparce {
-                    if all_text_tokens.len() > 12_000 {
-                        break;
-                    }
-                } else {
-                    if all_text_tokens.len() > 3_000 {
-                        break;
-                    }
-                }
+                all_text_from_issue.push_str(&commenter_input);
             }
         }
     }
 
-    let all_text_from_issue = bpe.decode(all_text_tokens).ok().unwrap_or(String::new());
+    all_text_from_issue = all_text_from_issue
+        .char_indices()
+        .take_while(|(idx, _)| *idx < 24_000)
+        .map(|(_, ch)| ch)
+        .collect();
 
     let target_str = target_person
         .clone()
@@ -429,11 +401,15 @@ pub async fn analyze_issue_integrated(
                 date: issue_date,
             };
 
-            Some((out, gm))
+            Ok((out, gm))
         }
         Err(_e) => {
             log::error!("Error generating issue summary #{}: {}", issue_number, _e);
-            None
+            Err(anyhow::anyhow!(
+                "Error generating issue summary #{}: {}",
+                issue_number,
+                _e
+            ))
         }
     }
 }
@@ -760,15 +736,14 @@ pub async fn aggregate_commits(
                 Some(t) => format!("&token={}", t),
             };
             let commit_patch_str = format!("{url}.patch{token_str}");
-            let stripped_texts = match github_http_get(&commit_patch_str).await {
+            let mut stripped_texts = match github_http_get(&commit_patch_str).await {
                 Ok(w) => String::from_utf8(w).ok()?,
                 Err(e) => {
                     log::error!("Error getting response from Github: {:?}", e);
                     return None; // Convert the error into the desired error type (e.g., anyhow::Error)
                 },
             };
-            let mut stripped_texts = stripped_texts;
-            stripped_texts.truncate(24_000);
+            stripped_texts = stripped_texts.char_indices().take_while(|(idx, _)| *idx < 24_000).map(|(_, ch)| ch).collect();
 
             let sys_prompt_1 = format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
