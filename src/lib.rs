@@ -26,6 +26,8 @@ async fn handler(
     dotenv().ok();
     logger::init();
 
+    let OPENAI_API_KEY = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+
     let about_repo = _qry
         .get("about_repo")
         .unwrap_or(&Value::Null)
