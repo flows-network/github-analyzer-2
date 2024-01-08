@@ -457,7 +457,7 @@ pub async fn get_commits_in_range_search(
     let encoded_query = urlencoding::encode(&query);
 
     let url_str = format!(
-        "search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
+        "search/commits?q={}&sort=commit-date&order=desc&per_page=100{token_str}",
         encoded_query
     );
     // let url_str = format!(
@@ -478,6 +478,7 @@ pub async fn get_commits_in_range_search(
         Ok(commits_page) => {
             for commit in commits_page.items {
                 if let Some(author) = &commit.author {
+                    log::info!("commit author: {:?}", author.clone());
                     git_memory_vec.push(GitMemory {
                         memory_type: MemoryType::Commit,
                         name: author.login.clone(),

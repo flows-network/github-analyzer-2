@@ -50,6 +50,7 @@ pub async fn weekly_report(
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
+                log::info!("found {count} commits:\n{commits_str}");
                 match count {
                     0 => break 'commits_block,
                     _ => {}
@@ -63,7 +64,7 @@ pub async fn weekly_report(
 
     let mut issues_map = HashMap::<String, String>::new();
 
-    'issues_block: {
+/*     'issues_block: {
         match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
@@ -85,7 +86,7 @@ pub async fn weekly_report(
             }
             None => log::error!("failed to get issues"),
         }
-    }
+    } */
 
     let now = Utc::now();
     let a_week_ago = now - Duration::days(n_days as i64 + 30);
