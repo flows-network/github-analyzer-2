@@ -26,6 +26,6 @@ github-flows = "0.7.0"
 tiktoken-rs = "0.2.2"
 async-openai-wasi = { version = "0.16.4", features = ["wasmedge-tls"] }
 tokio_wasi = { version = "1", features = ["rt", "macros", "net", "time", "io-util"]}
-# wasmedge_rustls_api = { version = "0.1", features = [ "tokio_async" ] }
+wasmedge_rustls_api = { version = "0.1", features = [ "tokio_async" ] }
 futures = "0.3.30"
 octocrab_wasi = { version = "0.19.1", features = ["wasi"], default-features = false }
