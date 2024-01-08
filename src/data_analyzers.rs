@@ -182,13 +182,13 @@ pub async fn process_issues(
 
     for result in results.into_iter().flatten() {
         let (user_name, url, summary) = result;
-
+log::info!("User: {:?}, Url: {:?}, Summary: {:?}", user_name.clone(), url.clone(), summary.clone());
         issues_map
-            .entry(user_name.clone()) // Clone the user_name for the HashMap key
+            .entry(user_name.clone()) 
             .and_modify(|tup| {
-                tup.0.push_str("\n"); // Use push for a single character
+                tup.0.push_str("\n"); 
                 tup.0.push_str(&url);
-                tup.1.push_str("\n"); // Use push for a single character
+                tup.1.push_str("\n"); 
                 tup.1.push_str(&summary);
             })
             .or_insert((url.to_string(), summary.to_string()));
@@ -417,12 +417,13 @@ pub async fn process_commits(
     let results = join_all(commit_futures).await;
     for result in results.into_iter().flatten() {
         let (user_name, url, summary): (String, String, String) = result;
+        log::info!("User: {:?}, Url: {:?}, Summary: {:?}", user_name.clone(), url.clone(), summary.clone());
         commits_map
-            .entry(user_name.clone()) // Clone the user_name for the HashMap key
+            .entry(user_name.clone()) 
             .and_modify(|tup| {
-                tup.0.push_str("\n"); // Use push for a single character
+                tup.0.push_str("\n"); 
                 tup.0.push_str(&url);
-                tup.1.push_str("\n"); // Use push for a single character
+                tup.1.push_str("\n"); 
                 tup.1.push_str(&summary);
             })
             .or_insert((url, summary.to_string()));

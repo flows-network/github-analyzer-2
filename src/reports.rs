@@ -137,7 +137,7 @@ pub async fn weekly_report(
             // log::info!("commits_summaries: {}", commits_summaries);
 
             report.push(format!("found {commits_count} commits:\n{commits_str}",));
-            log::info!("found {commits_count} commits:\n{commits_str}");
+            // log::info!("found {commits_count} commits:\n{commits_str}");
 
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(tup) => {
