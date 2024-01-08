@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
 use crate::utils::parse_summary_from_raw_json;
 use chrono::{Duration, Utc};
 use log;
+use octocrab_wasi::issues;
 use webhook_flows::send_response;
 
 pub async fn weekly_report(
@@ -18,6 +20,12 @@ pub async fn weekly_report(
 
     let mut _profile_data = String::new();
 
+    // let contributors_set = match get_contributors(owner, repo).await {
+    //     Some(contributors) => {
+    //         contributors.iter().collect::<HashSet<String>>();
+    //     }
+    //     None => HashSet::<String>::new(),
+    // };
     match is_valid_owner_repo_integrated(owner, repo).await {
         Err(_e) => {
             send_response(
@@ -37,20 +45,12 @@ pub async fn weekly_report(
     let mut commits_count = 0;
     let mut issues_count = 0;
 
-    let mut commits_map = HashMap::<String, String>::new();
+    let mut commits_map = HashMap::<String, (String, String)>::new();
     'commits_block: {
         match get_commits_in_range_search(owner, repo, user_name.clone(), n_days, token.clone())
             .await
         {
             Some((count, commits_vec)) => {
-                let commits_str = commits_vec
-                    .iter()
-                    .map(|com| com.source_url.to_owned())
-                    .collect::<Vec<String>>()
-                    .join("\n");
-
-                report.push(format!("found {count} commits:\n{commits_str}"));
-                log::info!("found {count} commits:\n{commits_str}");
                 match count {
                     0 => break 'commits_block,
                     _ => {}
@@ -62,19 +62,11 @@ pub async fn weekly_report(
         }
     }
 
-    let mut issues_map = HashMap::<String, String>::new();
+    let mut issues_map = HashMap::<String, (String, String)>::new();
 
     'issues_block: {
         match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
-                let issues_str = issue_vec
-                    .iter()
-                    .map(|issue| issue.html_url.to_string())
-                    .collect::<Vec<String>>()
-                    .join("\n");
-
-                report.push(format!("found {count} issues:\n{issues_str}"));
-
                 match count {
                     0 => break 'issues_block,
                     _ => {}
@@ -139,11 +131,21 @@ pub async fn weekly_report(
 
         //     todo!("implement issues-only report generation");
         // }
-        for (user_name, commits_summaries) in commits_map {
-            log::info!("user_name: {}", user_name);
-            log::info!("commits_summaries: {}", commits_summaries);
+
+        for (user_name, (commits_str, commits_summaries)) in commits_map {
+            // log::info!("user_name: {}", user_name);
+            // log::info!("commits_summaries: {}", commits_summaries);
+
+            report.push(format!("found {commits_count} commits:\n{commits_str}",));
+            log::info!("found {commits_count} commits:\n{commits_str}");
+
             let issues_summaries = match issues_map.get(&user_name) {
-                Some(issues_summaries) => issues_summaries.to_owned(),
+                Some(tup) => {
+                    let issues_str = tup.0.to_owned();
+                    report.push(format!("found {issues_count} issues:\n{issues_str}"));
+
+                    tup.1.to_owned()
+                }
                 None => "".to_string(),
             };
 

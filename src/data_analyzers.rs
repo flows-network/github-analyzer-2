@@ -157,7 +157,7 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
 pub async fn process_issues(
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
-    issues_map: &mut HashMap<String, String>,
+    issues_map: &mut HashMap<String, (String,String)>,
     token: Option<String>
 ) -> anyhow::Result<()> {
     use futures::future::join_all;
@@ -173,7 +173,7 @@ pub async fn process_issues(
                     target_person,
                     token
                 ).await.ok()?;
-                Some((gm.name, summary))
+                Some((gm.name, gm.source_url, summary))
             }
         })
         .collect();
@@ -181,15 +181,17 @@ pub async fn process_issues(
     let results = join_all(issue_futures).await;
 
     for result in results.into_iter().flatten() {
-        let (user_name, summary) = result;
+        let (user_name, url, summary) = result;
 
         issues_map
             .entry(user_name.clone()) // Clone the user_name for the HashMap key
-            .and_modify(|current_summary| {
-                current_summary.push('\n'); // Use push for a single character
-                current_summary.push_str(&summary);
+            .and_modify(|tup| {
+                tup.0.push_str("\n"); // Use push for a single character
+                tup.0.push_str(&url);
+                tup.1.push_str("\n"); // Use push for a single character
+                tup.1.push_str(&summary);
             })
-            .or_insert(summary.to_string());
+            .or_insert((url.to_string(), summary.to_string()));
     }
 
     if issues_map.len() == 0 {
@@ -371,7 +373,7 @@ pub async fn analyze_issue_integrated(
 }
 pub async fn process_commits(
     inp_vec: Vec<GitMemory>,
-    commits_map: &mut HashMap<String, String>,
+    commits_map: &mut HashMap<String, (String, String)>,
     token: Option<String>
 ) -> anyhow::Result<()> {
     use futures::future::join_all;
@@ -407,21 +409,23 @@ pub async fn process_commits(
                     "gpt-3.5-turbo-1106"
                 ).await.ok()?;
                 log::info!("Summary: {:?}", summary.clone());
-                Some((commit_obj.name, summary))
+                Some((commit_obj.name, commit_obj.source_url, summary))
             }
         })
         .collect();
 
     let results = join_all(commit_futures).await;
     for result in results.into_iter().flatten() {
-        let (user_name, summary): (String, String) = result;
+        let (user_name, url, summary): (String, String, String) = result;
         commits_map
             .entry(user_name.clone()) // Clone the user_name for the HashMap key
-            .and_modify(|current_summary| {
-                current_summary.push('\n'); // Use push for a single character
-                current_summary.push_str(&summary);
+            .and_modify(|tup| {
+                tup.0.push_str("\n"); // Use push for a single character
+                tup.0.push_str(&url);
+                tup.1.push_str("\n"); // Use push for a single character
+                tup.1.push_str(&summary);
             })
-            .or_insert(summary.to_string());
+            .or_insert((url, summary.to_string()));
     }
 
     Ok(())
