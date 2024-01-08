@@ -457,9 +457,10 @@ pub async fn get_commits_in_range_search(
     let encoded_query = urlencoding::encode(&query);
 
     let url_str = format!(
-        "search/commits?q={}&sort=commit-date&order=desc&per_page=100{token_str}",
+        "search/commits?q={}&sort=committer-date&order=desc&per_page=100{token_str}",
         encoded_query
     );
+    log::info!("url_str: {}", url_str.clone());
     // let url_str = format!(
     //     "https://api.github.com/search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
     //     encoded_query
