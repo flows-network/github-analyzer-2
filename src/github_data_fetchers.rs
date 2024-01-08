@@ -459,7 +459,7 @@ pub async fn get_commits_in_range_search(
 
     let url_str = format!(
         "search/commits?q={}&sort=committer-date&order=desc&per_page=100{}",
-        encoded_query, token_str
+        query, token_str
     );
     log::info!("url_str: {}", url_str.clone());
     // let url_str = format!(
