@@ -448,17 +448,18 @@ pub async fn get_commits_in_range_search(
     };
     let author_str = match &user_name {
         None => String::from(""),
-        Some(t) => format!("author:{}", t.as_str()),
+        Some(t) => format!(" author:{}", t.as_str()),
     };
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
 
-    let query = format!("repo:{owner}/{repo} {author_str} updated:>{n_days_ago}");
+    // let query = format!("repo:{owner}/{repo} {author_str} updated:>{n_days_ago}");
+    let query = format!("repo:{}/{}{} updated:>{}", owner, repo, author_str, n_days_ago);
     let encoded_query = urlencoding::encode(&query);
 
     let url_str = format!(
-        "search/commits?q={}&sort=committer-date&order=desc&per_page=100{token_str}",
-        encoded_query
+        "search/commits?q={}&sort=committer-date&order=desc&per_page=100{}",
+        encoded_query, token_str
     );
     log::info!("url_str: {}", url_str.clone());
     // let url_str = format!(
