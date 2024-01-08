@@ -453,7 +453,6 @@ pub async fn get_commits_in_range_search(
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
 
-    // let query = format!("repo:{owner}/{repo} {author_str} updated:>{n_days_ago}");
     let query = format!("repo:{}/{}{}%20committer-date:>{}", owner, repo, author_str, n_days_ago);
     // let encoded_query = urlencoding::encode(&query);
 
@@ -461,7 +460,6 @@ pub async fn get_commits_in_range_search(
         "search/commits?q={}&sort=committer-date&order=desc&per_page=100{}",
         query, token_str
     );
-    log::info!("url_str: {}", url_str.clone());
     // let url_str = format!(
     //     "https://api.github.com/search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
     //     encoded_query

@@ -209,7 +209,7 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     Ok(output)
 }
 
-pub async fn github_http_post_gql(query: &str) -> anyhow::Result<Vec<u8>> {
+/* pub async fn github_http_post_gql(query: &str) -> anyhow::Result<Vec<u8>> {
     use http_req::{request::Method, request::Request, uri::Uri};
     let token = std::env::var("GITHUB_TOKEN").expect("github_token is required");
     let base_url = "https://api.github.com/graphql";
@@ -238,9 +238,9 @@ pub async fn github_http_post_gql(query: &str) -> anyhow::Result<Vec<u8>> {
             Err(anyhow::anyhow!(_e))
         }
     }
-}
+} */
 
-pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
+/* pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
     use http_req::{request::Method, request::Request, uri::Uri};
     let token = std::env::var("GITHUB_TOKEN").expect("github_token is required");
     let mut writer = Vec::new();
@@ -266,4 +266,4 @@ pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
             Err(anyhow::anyhow!(_e))
         }
     }
-}
+} */

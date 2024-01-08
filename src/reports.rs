@@ -140,6 +140,8 @@ pub async fn weekly_report(
         //     todo!("implement issues-only report generation");
         // }
         for (user_name, commits_summaries) in commits_map {
+            log::info!("user_name: {}", user_name);
+            log::info!("commits_summaries: {}", commits_summaries);
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(issues_summaries) => issues_summaries.to_owned(),
                 None => "".to_string(),

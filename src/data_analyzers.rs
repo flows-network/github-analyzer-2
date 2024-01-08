@@ -408,10 +408,7 @@ pub async fn process_commits(
             let res = octocrab._get(&url, None::<&()>).await.ok()?;
 
                     let text = res.text().await.ok()?;
-                    log::info!("Res: {:?}", text.clone());
-
-
-
+                    // log::info!("Res: {:?}", text.clone());
             let stripped_texts = text.chars().take(24_000).collect::<String>();
             // let stripped_texts = String::from_utf8(response).ok()?.chars().take(24_000).collect::<String>();
 let user_name = commit_obj.name.clone();
@@ -627,7 +624,7 @@ pub async fn correlate_user_and_home_project(
     .ok()
 }
 
-pub async fn github_http_fetch(token: &str, url: &str) -> Option<Vec<u8>> {
+/* pub async fn github_http_fetch(token: &str, url: &str) -> Option<Vec<u8>> {
     let url = http_req::uri::Uri::try_from(url).unwrap();
     let mut writer = Vec::new();
 
@@ -651,4 +648,4 @@ pub async fn github_http_fetch(token: &str, url: &str) -> Option<Vec<u8>> {
             None
         }
     }
-}
+} */
