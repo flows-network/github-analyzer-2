@@ -240,7 +240,7 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     }
 } */
 
-/* pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
+pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
     use http_req::{request::Method, request::Request, uri::Uri};
     let token = std::env::var("GITHUB_TOKEN").expect("github_token is required");
     let mut writer = Vec::new();
@@ -266,4 +266,4 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
             Err(anyhow::anyhow!(_e))
         }
     }
-} */
+}

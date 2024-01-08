@@ -384,23 +384,11 @@ pub async fn process_commits(
     let commit_futures: Vec<_> = inp_vec
         .into_iter()
         .map(|commit_obj| {
-
-          let octocrab = get_octo(&GithubLogin::Default);
       
             let url = format!("{}.patch{}", commit_obj.source_url, token_query);
             async move {
-                // let response = github_http_get(&url).await.ok()?;
-                // let res = octocrab._get(&url, None::<&()>).await.ok()?;
-
-                // let text = res.text().await.ok()?;
-                let res = match octocrab._get(&url, None::<&()>).await {
-                    Ok(res) => res,
-                    Err(_e) => {
-                        log::error!("Error getting response from Github: {:?}", _e);
-                        return None;
-                    }
-                };
-                let text = res.text().await.ok()?;
+                let response = github_http_get(&url).await.ok()?;
+                let text = String::from_utf8(response).ok()?;
 
                 let stripped_texts = text.chars().take(24_000).collect::<String>();
                 // let stripped_texts = String::from_utf8(response).ok()?.chars().take(24_000).collect::<String>();
