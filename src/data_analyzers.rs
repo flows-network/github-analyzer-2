@@ -34,7 +34,6 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
                 .as_ref()
                 .unwrap_or(&String::from(""))
                 .to_string();
-
         }
         Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
     }
@@ -398,12 +397,23 @@ pub async fn process_commits(
         None => String::new(),
         Some(t) => format!("?token={}", t),
     };
+
+    let octocrab = get_octo(&GithubLogin::Default);
+
     let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
 
         let url = format!("{}.patch{}", commit_obj.source_url, token_query);
         async move {
-            let response = github_http_get(&url).await.ok()?;
-            let stripped_texts = String::from_utf8(response).ok()?.chars().take(24_000).collect::<String>();
+            // let response = github_http_get(&url).await.ok()?;
+            let res = octocrab._get(&url, None::<&()>).await.ok()?;
+
+                    let text = res.text().await.ok()?;
+                    log::info!("Res: {:?}", text.clone());
+
+
+
+            let stripped_texts = text.chars().take(24_000).collect::<String>();
+            // let stripped_texts = String::from_utf8(response).ok()?.chars().take(24_000).collect::<String>();
 let user_name = commit_obj.name.clone();
             let sys_prompt_1 = format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
@@ -413,7 +423,7 @@ let tag_line = commit_obj.tag_line;
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
         let summary = chat_inner(&sys_prompt_1, &usr_prompt_1, 128, "gpt-3.5-turbo-1106").await.ok()?;
-
+log::info!("Summary: {:?}", summary.clone());
             Some((commit_obj.name, summary))
         }
     }).collect();
