@@ -453,7 +453,10 @@ pub async fn get_commits_in_range_search(
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
 
-    let query = format!("repo:{}/{}{}%20committer-date:>{}", owner, repo, author_str, n_days_ago);
+    let query = format!(
+        "repo:{}/{}{}%20committer-date:>{}",
+        owner, repo, author_str, n_days_ago
+    );
     // let encoded_query = urlencoding::encode(&query);
 
     let url_str = format!(

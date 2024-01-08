@@ -64,7 +64,7 @@ pub async fn weekly_report(
 
     let mut issues_map = HashMap::<String, String>::new();
 
-/*     'issues_block: {
+    /*     'issues_block: {
         match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
