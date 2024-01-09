@@ -7,7 +7,6 @@ use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
 use openai_flows::chat::ChatModel;
 
-
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct CommunityProfile {
@@ -54,7 +53,7 @@ pub async fn get_repo_info(about_repo: &str) -> Option<String> {
 pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
     let repo_home_url = format!("https://github.com/{}", about_repo);
 
-    let mut raw_text = String::new();
+    let raw_text;
     match web_scraper_flows::get_page_text(&repo_home_url).await {
         Ok(page_text) => {
             raw_text = page_text;
@@ -109,7 +108,7 @@ pub async fn is_valid_owner_repo(
     }
     let community_profile_url = format!("repos/{}/{}/community/profile", owner, repo);
 
-    let mut description = String::new();
+    let description;
     let mut has_readme = false;
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -317,8 +316,8 @@ pub async fn analyze_issue_integrated(
     };
 
     // let usr_prompt_1 = &format!(
-    //     "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions: 
-    //     {{ 
+    //     "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions:
+    //     {{
     //     \"contributor_name_1\": \"summary\",
     //     \"contributor_name_2\": \"summary\"
     //     }}",
@@ -334,8 +333,7 @@ pub async fn analyze_issue_integrated(
         all_text_from_issue,
         commenters_to_watch_str
     );
-    
-    let mut issues_mini_map = HashMap::<String, (String, String)>::new();
+
     match chat_inner(sys_prompt_1, usr_prompt_1, 128, ChatModel::GPT35Turbo16K).await {
         Ok(r) => {
             let parsed = parse_issue_summary_from_json(&r)

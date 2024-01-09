@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 
 use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
@@ -20,7 +19,7 @@ pub async fn weekly_report(
 
     let mut _profile_data = String::new();
 
-    let mut contributors_set = HashSet::<String>::new();
+    let  contributors_set;
 
     match is_valid_owner_repo(owner, repo).await {
         Err(_e) => {
@@ -39,9 +38,6 @@ pub async fn weekly_report(
         }
     }
 
-    let mut commits_count = 0;
-    let mut issues_count = 0;
-
     let mut commits_map = HashMap::<String, (String, String)>::new();
     'commits_block: {
         match
@@ -54,7 +50,6 @@ pub async fn weekly_report(
                     }
                     _ => {}
                 }
-                commits_count = count;
                 let _ = process_commits(commits_vec, &mut commits_map, token.clone()).await;
             }
             None => log::error!("failed to get commits"),
@@ -72,7 +67,6 @@ pub async fn weekly_report(
                     }
                     _ => {}
                 }
-                issues_count = count;
                 issues_map = match
                     process_issues(
                         issue_vec,
@@ -114,8 +108,6 @@ pub async fn weekly_report(
         Err(_e) => log::error!("No discussions involving user found at {owner}/{repo}: {_e}"),
     }
 
-    let total_input_entry_count = (commits_count + issues_count) as u16;
-
     if commits_map.len() == 0 && issues_map.len() == 0 && discussion_data.is_empty() {
         match &user_name {
             Some(target_person) => {
@@ -138,23 +130,26 @@ pub async fn weekly_report(
 
         //     todo!("implement issues-only report generation");
         // }
-
         for (user_name, (commits_str, commits_summaries)) in commits_map {
+            let mut issues_count = 0;
             // log::info!("user_name: {}", user_name);
             // log::info!("commits_summaries: {}", commits_summaries);
-
+            let commits_count = commits_str.lines().count();
             report.push(format!("found {commits_count} commits:\n{commits_str}"));
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(tup) => {
                     let issues_str = tup.0.to_owned();
+                    issues_count = issues_str.lines().count();
+
                     report.push(format!("found {issues_count} issues:\n{issues_str}"));
 
                     tup.1.to_owned()
                 }
                 None => "".to_string(),
             };
+            let total_input_entry_count = (commits_count + issues_count) as u16;
 
             match
                 correlate_commits_issues_discussions(

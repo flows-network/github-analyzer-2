@@ -136,7 +136,7 @@ pub async fn chat_inner(
     let openai = OpenAIFlows::new();
 
     let co = ChatOptions {
-        model: ChatModel::GPT35Turbo16K,
+        model: model,
         restart: true,
         system_prompt: Some(system_prompt),
         max_tokens: Some(max_token),
