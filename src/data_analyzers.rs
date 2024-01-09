@@ -5,6 +5,8 @@ use github_flows::{ get_octo, octocrab::models::{ issues::Comment, issues::Issue
 use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
+use openai_flows::chat::ChatModel;
+
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -76,7 +78,7 @@ pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
     let usr_prompt =
         &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
 
-    match chat_inner(sys_prompt, usr_prompt, 700, "gpt-3.5-turbo-1106").await {
+    match chat_inner(sys_prompt, usr_prompt, 700, ChatModel::GPT35Turbo16K).await {
         Ok(r) => {
             return Some(r);
         }
@@ -223,7 +225,7 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
         "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
     );
 
-    match chat_inner(sys_prompt_1, usr_prompt_1, 256, "gpt-3.5-turbo-1106").await {
+    match chat_inner(sys_prompt_1, usr_prompt_1, 256, ChatModel::GPT35Turbo16K).await {
         Ok(r) => {
             return Some(r);
         }
@@ -325,7 +327,7 @@ pub async fn analyze_issue_integrated(
     );
 
     let mut issues_mini_map = HashMap::<String, (String, String)>::new();
-    match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
+    match chat_inner(sys_prompt_1, usr_prompt_1, 128, ChatModel::GPT35Turbo16K).await {
         Ok(r) => {
             let parsed = parse_issue_summary_from_json(&r)
                 .ok()
@@ -389,7 +391,7 @@ pub async fn process_commits(
                     &sys_prompt_1,
                     &usr_prompt_1,
                     128,
-                    "gpt-3.5-turbo-1106"
+                    ChatModel::GPT35Turbo16K
                 ).await.ok()?;
                 log::info!("Summary: {:?}", summary.clone());
                 Some((commit_obj.name, commit_obj.source_url, summary))

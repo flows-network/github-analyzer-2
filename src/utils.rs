@@ -1,14 +1,4 @@
-use async_openai::{
-    types::{
-        // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestUserMessageArgs,
-        // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs,
-        // FinishReason,
-    },
-    Client,
-};
+use openai_flows::{ chat::{ ChatModel, ChatOptions }, OpenAIFlows };
 use log;
 use serde_json::Value;
 
@@ -78,7 +68,7 @@ pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String
         .map_or("failed to decode tokens".to_string(), |s| s.to_string())
 }
 
-pub async fn chain_of_chat(
+/* pub async fn chain_of_chat(
     sys_prompt_1: &str,
     usr_prompt_1: &str,
     chat_id: &str,
@@ -99,7 +89,7 @@ pub async fn chain_of_chat(
     ];
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(gen_len_1)
-        .model("gpt-3.5-turbo-1106")
+        .model(ChatModel::GPT35Turbo16K)
         .messages(messages.clone())
         .build()?;
 
@@ -120,7 +110,7 @@ pub async fn chain_of_chat(
 
     let request = CreateChatCompletionRequestArgs::default()
         .max_tokens(gen_len_2)
-        .model("gpt-3.5-turbo-1106")
+        .model(ChatModel::GPT35Turbo16K)
         .messages(messages)
         .build()?;
 
@@ -135,9 +125,32 @@ pub async fn chain_of_chat(
             return Err(anyhow::anyhow!(error_tag.to_string()));
         }
     }
-}
+} */
 
 pub async fn chat_inner(
+    system_prompt: &str,
+    user_input: &str,
+    max_token: u16,
+    model: ChatModel
+) -> anyhow::Result<String> {
+    let openai = OpenAIFlows::new();
+
+    let co = ChatOptions {
+        model: ChatModel::GPT35Turbo16K,
+        restart: true,
+        system_prompt: Some(system_prompt),
+        max_tokens: Some(max_token),
+        temperature: Some(0.7),
+        ..Default::default()
+    };
+
+    match openai.chat_completion("chat_id", user_input, &co).await {
+        Ok(res) => Ok(res.choice),
+        Err(_e) => Err(anyhow::anyhow!("OpenAI Error {:?}", _e)),
+    }
+}
+
+/* pub async fn chat_inner(
     system_prompt: &str,
     user_input: &str,
     max_token: u16,
@@ -171,7 +184,7 @@ pub async fn chat_inner(
         }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
-}
+} */
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     let parsed: Value = serde_json::from_str(input)?;
@@ -269,4 +282,60 @@ pub async fn github_http_get(url: &str) -> anyhow::Result<Vec<u8>> {
             Err(anyhow::anyhow!(_e))
         }
     }
+}
+
+pub async fn chain_of_chat(
+    sys_prompt_1: &str,
+    usr_prompt_1: &str,
+    chat_id: &str,
+    gen_len_1: u16,
+    usr_prompt_2: &str,
+    gen_len_2: u16,
+    error_tag: &str
+) -> anyhow::Result<String> {
+    let openai = OpenAIFlows::new();
+
+    let co_1 = ChatOptions {
+        model: ChatModel::GPT35Turbo16K,
+        restart: true,
+        system_prompt: Some(sys_prompt_1),
+        max_tokens: Some(gen_len_1),
+        temperature: Some(0.7),
+        ..Default::default()
+    };
+
+    match openai.chat_completion(chat_id, usr_prompt_1, &co_1).await {
+        Ok(res_1) => {
+            let sys_prompt_2 =
+                serde_json::json!([{"role": "system", "content": sys_prompt_1},
+    {"role": "user", "content": usr_prompt_1},
+    {"role": "assistant", "content": &res_1.choice}]).to_string();
+
+            let co_2 = ChatOptions {
+                model: ChatModel::GPT35Turbo16K,
+                restart: false,
+                system_prompt: Some(&sys_prompt_2),
+                max_tokens: Some(gen_len_2),
+                temperature: Some(0.7),
+                ..Default::default()
+            };
+            match openai.chat_completion(chat_id, usr_prompt_2, &co_2).await {
+                Ok(res_2) => {
+                    if res_2.choice.len() < 10 {
+                        log::error!(
+                            "{}, GPT generation went sideway: {:?}",
+                            error_tag,
+                            res_2.choice
+                        );
+                        return Err(anyhow::anyhow!(error_tag.to_string()));
+                    }
+                    return Ok(res_2.choice);
+                }
+                Err(_e) => log::error!("{}, Step 2 GPT generation error {:?}", error_tag, _e),
+            };
+        }
+        Err(_e) => log::error!("{}, Step 1 GPT generation error {:?}", error_tag, _e),
+    }
+
+    Err(anyhow::anyhow!(error_tag.to_string()))
 }
