@@ -4,12 +4,11 @@ use chrono::{ DateTime, Utc };
 use github_flows::{ get_octo, octocrab::models::{ issues::Comment, issues::Issue }, GithubLogin };
 use log;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{ HashMap, HashSet };
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct CommunityProfile {
-        health_percentage: u16,
         description: Option<String>,
         readme: Option<String>,
         updated_at: Option<DateTime<Utc>>,
@@ -88,10 +87,12 @@ pub async fn get_repo_overview_by_scraper(about_repo: &str) -> Option<String> {
     }
 }
 
-pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::Result<GitMemory> {
+pub async fn is_valid_owner_repo(
+    owner: &str,
+    repo: &str
+) -> anyhow::Result<(String, String, HashSet<String>)> {
     #[derive(Deserialize)]
     struct CommunityProfile {
-        health_percentage: u16,
         description: Option<String>,
         files: FileDetails,
         updated_at: Option<DateTime<Utc>>,
@@ -139,27 +140,24 @@ pub async fn is_valid_owner_repo_integrated(owner: &str, repo: &str) -> anyhow::
         }
     }
 
-    if description.is_empty() {
-        description = payload.clone();
-    } else if payload.is_empty() {
+    if payload.is_empty() {
         payload = description.clone();
     }
 
-    Ok(GitMemory {
-        memory_type: MemoryType::Meta,
-        name: format!("{}/{}", owner, repo),
-        tag_line: description,
-        source_url: community_profile_url,
-        payload: payload,
-    })
+    let contributors_set = match get_contributors(owner, repo).await {
+        Ok(contributors) => contributors.into_iter().collect::<HashSet<String>>(),
+        Err(_e) => HashSet::<String>::new(),
+    };
+
+    Ok((format!("{}/{}", owner, repo), payload, contributors_set))
 }
 
 pub async fn process_issues(
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
-    issues_map: &mut HashMap<String, (String,String)>,
+    contributors_set: HashSet<String>,
     token: Option<String>
-) -> anyhow::Result<()> {
+) -> anyhow::Result<HashMap<String, (String, String)>> {
     use futures::future::join_all;
 
     let issue_futures: Vec<_> = inp_vec
@@ -167,89 +165,49 @@ pub async fn process_issues(
         .map(|issue| {
             let target_person = target_person.clone();
             let token = token.clone();
+            let contributors_set = contributors_set.clone();
             async move {
-                let (summary, gm) = analyze_issue_integrated(
+                let ve = analyze_issue_integrated(
                     &issue,
                     target_person,
+                    contributors_set,
                     token
                 ).await.ok()?;
-                Some((gm.name, gm.source_url, summary))
+                Some(ve)
             }
         })
         .collect();
 
     let results = join_all(issue_futures).await;
+    let mut issues_map = HashMap::<String, (String, String)>::new();
 
     for result in results.into_iter().flatten() {
-        let (user_name, url, summary) = result;
-log::info!("User: {:?}, Url: {:?}, Summary: {:?}", user_name.clone(), url.clone(), summary.clone());
-        issues_map
-            .entry(user_name.clone()) 
-            .and_modify(|tup| {
-                tup.0.push_str("\n"); 
-                tup.0.push_str(&url);
-                tup.1.push_str("\n"); 
-                tup.1.push_str(&summary);
-            })
-            .or_insert((url.to_string(), summary.to_string()));
+        for item in result {
+            let (user_name, url, summary) = item;
+            log::info!(
+                "User: {:?}, Url: {:?}, Summary: {:?}",
+                user_name.clone(),
+                url.clone(),
+                summary.clone()
+            );
+            issues_map
+                .entry(user_name.clone())
+                .and_modify(|tup| {
+                    tup.0.push_str("\n");
+                    tup.0.push_str(&url);
+                    tup.1.push_str("\n");
+                    tup.1.push_str(&summary);
+                })
+                .or_insert((url.to_string(), summary.to_string()));
+        }
     }
 
     if issues_map.len() == 0 {
         anyhow::bail!("No issues processed");
     }
 
-    Ok(())
+    Ok(issues_map)
 }
-
-/* pub async fn process_issues(
-    inp_vec: Vec<Issue>,
-    target_person: Option<String>,
-    token: Option<String>,
-) -> Option<(String, usize, Vec<GitMemory>)> {
-    use futures::future::join_all;
-    use tokio::time::Instant;
-    let mut issues_summaries = String::new();
-    let mut git_memory_vec = Vec::new();
-    let start_time = Instant::now();
-
-    let issue_futures: Vec<_> = inp_vec
-        .into_iter()
-        .map(|issue| {
-            let target_person = target_person.clone();
-            let token = token.clone();
-            async move {
-                match analyze_issue_integrated(&issue, target_person, token).await {
-                    Err(_e) => None,
-                    Ok((summary, gm)) => Some((summary, gm)),
-                }
-            }
-        })
-        .collect();
-
-    let results = join_all(issue_futures).await;
-
-    for (summary, gm) in results.into_iter().flatten() {
-        issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
-        git_memory_vec.push(gm);
-        if git_memory_vec.len() > 40 {
-            break;
-        }
-    }
-
-    let count = git_memory_vec.len();
-    if count == 0 {
-        log::error!("No issues processed");
-        return None;
-    }
-
-    let elapsed = start_time.elapsed();
-    log::info!(
-        "Time elapsed in process issues is: {} seconds",
-        elapsed.as_secs(),
-    );
-
-    Some((issues_summaries, count, git_memory_vec))
-} */
 
 pub async fn analyze_readme(content: &str) -> Option<String> {
     let sys_prompt_1 = &format!(
@@ -279,12 +237,13 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
 pub async fn analyze_issue_integrated(
     issue: &Issue,
     target_person: Option<String>,
+    contributors_set: HashSet<String>,
     token: Option<String>
-) -> anyhow::Result<(String, GitMemory)> {
+) -> anyhow::Result<Vec<(String, String, String)>> {
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
     let issue_number = issue.number;
-
+    let mut issue_commenters_to_watch = Vec::new();
     let issue_body = match &issue.body {
         Some(body) => squeeze_fit_remove_quoted(body, 400, 0.7),
         None => "".to_string(),
@@ -311,12 +270,14 @@ pub async fn analyze_issue_integrated(
         Some(t) => format!("&token={}", t.as_str()),
     };
 
-    let route = issue_url.clone().replace("https://api.github.com/", "");
-    let url_str = format!("{}/comments?&sort=updated&order=desc&per_page=100{}", route, token_str);
-
+    let comments_url = format!(
+        "{}comments?sort=updated&order=desc&per_page=100{}",
+        issue_url.replace("https://api.github.com/", ""),
+        token_str
+    );
     let octocrab = get_octo(&GithubLogin::Default);
 
-    match octocrab.get::<Vec<Comment>, _, ()>(&url_str, None::<&()>).await {
+    match octocrab.get::<Vec<Comment>, _, ()>(&comments_url, None::<&()>).await {
         Err(_e) => {
             log::error!("Error parsing Vec<Comment> : {:?}", _e);
         }
@@ -327,17 +288,17 @@ pub async fn analyze_issue_integrated(
                     None => String::new(),
                 };
                 let commenter = &comment.user.login;
+                if contributors_set.contains(commenter) {
+                    issue_commenters_to_watch.push(commenter.to_string());
+                }
+
                 let commenter_input = format!("{} commented: {}", commenter, comment_body);
                 all_text_from_issue.push_str(&commenter_input);
             }
         }
     }
 
-    all_text_from_issue = all_text_from_issue
-        .char_indices()
-        .take_while(|(idx, _)| *idx < 24_000)
-        .map(|(_, ch)| ch)
-        .collect();
+    all_text_from_issue = all_text_from_issue.chars().take(32_000).collect();
 
     let target_str = target_person
         .clone()
@@ -347,23 +308,47 @@ pub async fn analyze_issue_integrated(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
 
+    let commenters_to_watch_str = if !target_str.is_empty() || issue_commenters_to_watch.len() == 0 {
+        target_str
+    } else {
+        issue_commenters_to_watch.join(", ")
+    };
+
     let usr_prompt_1 = &format!(
-        "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
+        "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions: 
+        {{ 
+        \"contributor_name_1\": \"summary\",
+        \"contributor_name_2\": \"summary\"
+        }}",
+        all_text_from_issue,
+        commenters_to_watch_str
     );
 
+    let mut issues_mini_map = HashMap::<String, (String, String)>::new();
     match chat_inner(sys_prompt_1, usr_prompt_1, 128, "gpt-3.5-turbo-1106").await {
         Ok(r) => {
-            let out = format!("{} {}", issue_url, r);
-            let name = target_person.map_or(issue_creator_name.to_string(), |t| t.to_string());
-            let gm = GitMemory {
-                memory_type: MemoryType::Issue,
-                name: name,
-                tag_line: issue_title,
-                source_url: source_url,
-                payload: r,
-            };
+            let parsed = parse_issue_summary_from_json(&r)
+                .ok()
+                .unwrap_or_else(|| vec![]);
 
-            Ok((out, gm))
+            let out = parsed
+                .into_iter()
+                .map(|(user_name, summary)| { (user_name, source_url.clone(), summary) })
+                .collect::<Vec<(String, String, String)>>();
+
+            Ok(out)
+
+            // let out = format!("{} {}", issue_url, r);
+            // let name = target_person.map_or(issue_creator_name.to_string(), |t| t.to_string());
+            // let gm = GitMemory {
+            //     memory_type: MemoryType::Issue,
+            //     name: name,
+            //     tag_line: issue_title,
+            //     source_url: source_url,
+            //     payload: r,
+            // };
+
+            // Ok((out, gm))
         }
         Err(_e) => {
             log::error!("Error generating issue summary #{}: {}", issue_number, _e);
@@ -382,11 +367,9 @@ pub async fn process_commits(
         Some(t) => format!("?token={}", t),
     };
 
-
     let commit_futures: Vec<_> = inp_vec
         .into_iter()
         .map(|commit_obj| {
-      
             let url = format!("{}.patch{}", commit_obj.source_url, token_query);
             async move {
                 let response = github_http_get(&url).await.ok()?;
@@ -417,13 +400,18 @@ pub async fn process_commits(
     let results = join_all(commit_futures).await;
     for result in results.into_iter().flatten() {
         let (user_name, url, summary): (String, String, String) = result;
-        log::info!("User: {:?}, Url: {:?}, Summary: {:?}", user_name.clone(), url.clone(), summary.clone());
+        log::info!(
+            "User: {:?}, Url: {:?}, Summary: {:?}",
+            user_name.clone(),
+            url.clone(),
+            summary.clone()
+        );
         commits_map
-            .entry(user_name.clone()) 
+            .entry(user_name.clone())
             .and_modify(|tup| {
-                tup.0.push_str("\n"); 
+                tup.0.push_str("\n");
                 tup.0.push_str(&url);
-                tup.1.push_str("\n"); 
+                tup.1.push_str("\n");
                 tup.1.push_str(&summary);
             })
             .or_insert((url, summary.to_string()));

@@ -29,3 +29,4 @@ tokio_wasi = { version = "1", features = ["rt", "macros", "net", "time", "io-uti
 wasmedge_rustls_api = { version = "0.1", features = [ "tokio_async" ] }
 futures = "0.3.30"
 octocrab_wasi = { version = "0.19.1", features = ["wasi"], default-features = false }
+store-flows = "0.3.1"
