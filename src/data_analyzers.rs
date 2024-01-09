@@ -316,8 +316,17 @@ pub async fn analyze_issue_integrated(
         issue_commenters_to_watch.join(", ")
     };
 
+    // let usr_prompt_1 = &format!(
+    //     "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions: 
+    //     {{ 
+    //     \"contributor_name_1\": \"summary\",
+    //     \"contributor_name_2\": \"summary\"
+    //     }}",
+    //     all_text_from_issue,
+    //     commenters_to_watch_str
+    // );
     let usr_prompt_1 = &format!(
-        "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions: 
+        "Analyze the GitHub issue content: {}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Highlight the role and significance of '{}' in contributing towards the resolution or progression of the discussion. If the target person's contribution is negligible or non-existent, leave the corresponding summary blank. Format the analysis into a flat JSON structure with one level of depth where each key maps directly to a single string value. Use the following template, replacing 'contributor_name' with the actual contributor's name, and 'summary' with your analysis of their contributions or an empty string if their contribution is negligible: 
         {{ 
         \"contributor_name_1\": \"summary\",
         \"contributor_name_2\": \"summary\"
@@ -325,7 +334,7 @@ pub async fn analyze_issue_integrated(
         all_text_from_issue,
         commenters_to_watch_str
     );
-
+    
     let mut issues_mini_map = HashMap::<String, (String, String)>::new();
     match chat_inner(sys_prompt_1, usr_prompt_1, 128, ChatModel::GPT35Turbo16K).await {
         Ok(r) => {
