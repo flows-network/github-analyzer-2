@@ -19,7 +19,7 @@ pub async fn weekly_report(
 
     let mut _profile_data = String::new();
 
-    let  contributors_set;
+    let contributors_set;
 
     match is_valid_owner_repo(owner, repo).await {
         Err(_e) => {
@@ -132,10 +132,10 @@ pub async fn weekly_report(
         // }
         for (user_name, (commits_str, commits_summaries)) in commits_map {
             let mut issues_count = 0;
-            log::info!("user_name: {}", user_name);
             // log::info!("commits_summaries: {}", commits_summaries);
             let commits_count = commits_str.lines().count();
-            if commits_count <=2 {
+            if commits_count <= 2 {
+                log::info!("user_name: {}", user_name);
                 log::info!("{commits_summaries:?}");
             }
             report.push(format!("found {commits_count} commits:\n{commits_str}"));
@@ -145,7 +145,7 @@ pub async fn weekly_report(
                 Some(tup) => {
                     let issues_str = tup.0.to_owned();
                     issues_count = issues_str.lines().count();
-                    if issues_count <=2 {
+                    if issues_count <= 2 {
                         log::info!("issue_summaries: {:?}", tup.1.clone());
                     }
                     report.push(format!("found {issues_count} issues:\n{issues_str}"));

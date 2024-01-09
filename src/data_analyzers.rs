@@ -271,32 +271,33 @@ pub async fn analyze_issue_integrated(
         Some(t) => format!("&token={}", t.as_str()),
     };
 
+    // let comments_url = format!(
+    //     "{}/comments?sort=updated&order=desc&per_page=100{}",
+    //     issue_url.replace("https://api.github.com/", ""),
+    //     token_str
+    // );
     let comments_url = format!(
         "{}/comments?sort=updated&order=desc&per_page=100{}",
-        issue_url.replace("https://api.github.com/", ""),
+        issue_url,
         token_str
     );
-    let octocrab = get_octo(&GithubLogin::Default);
+    // let octocrab = get_octo(&GithubLogin::Default);
 
-    match octocrab.get::<Vec<Comment>, _, ()>(&comments_url, None::<&()>).await {
-        Err(_e) => {
-            log::error!("Error parsing Vec of Comments : {:?}", _e);
-        }
-        Ok(comments_obj) => {
-            for comment in &comments_obj {
-                let comment_body = match &comment.body {
-                    Some(body) => squeeze_fit_remove_quoted(body, 200, 1.0),
-                    None => String::new(),
-                };
-                let commenter = &comment.user.login;
-                if contributors_set.contains(commenter) {
-                    issue_commenters_to_watch.push(commenter.to_string());
-                }
+    let response = github_http_get(&comments_url).await?;
+    let comments_obj = serde_json::from_slice::<Vec<Comment>>(&response)?;
 
-                let commenter_input = format!("{} commented: {}", commenter, comment_body);
-                all_text_from_issue.push_str(&commenter_input);
-            }
+    for comment in &comments_obj {
+        let comment_body = match &comment.body {
+            Some(body) => squeeze_fit_remove_quoted(body, 200, 1.0),
+            None => String::new(),
+        };
+        let commenter = &comment.user.login;
+        if contributors_set.contains(commenter) {
+            issue_commenters_to_watch.push(commenter.to_string());
         }
+
+        let commenter_input = format!("{} commented: {}", commenter, comment_body);
+        all_text_from_issue.push_str(&commenter_input);
     }
 
     all_text_from_issue = all_text_from_issue.chars().take(32_000).collect();
