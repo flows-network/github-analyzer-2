@@ -125,14 +125,9 @@ pub async fn weekly_report(
             }
         }
     } else {
-        // if commits_map.len() == 0 && issues_map.len() > 0 {
-        //     report = vec!["No useful data found, nothing to report".to_string()];
-
-        //     todo!("implement issues-only report generation");
-        // }
         for (user_name, (commits_str, commits_summaries)) in commits_map {
             let mut issues_count = 0;
-            // log::info!("commits_summaries: {}", commits_summaries);
+
             let commits_count = commits_str.lines().count();
             if commits_count <= 2 {
                 log::info!("user_name: {}", user_name);
@@ -156,6 +151,24 @@ pub async fn weekly_report(
             };
             let total_input_entry_count = (commits_count + issues_count) as u16;
 
+            if commits_count <= 2 {
+                match
+                    correlate_commits_issues_sparse(
+                        &commits_summaries,
+                        &issues_summaries,
+                        &user_name
+                    ).await
+                {
+                    None => {
+                        // report = vec!["no report generated".to_string()];
+                    }
+                    Some(final_summary) => {
+                        if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+                            report.push(clean_summary);
+                        }
+                    }
+                }
+            }
             match
                 correlate_commits_issues_discussions(
                     Some(&_profile_data),

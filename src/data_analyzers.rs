@@ -476,6 +476,30 @@ pub async fn process_commits(
     Ok(successful_results)
 } */
 
+pub async fn correlate_commits_issues_sparse(
+    _commits_summary: &str,
+    _issues_summary: &str,
+    target_person: &str
+) -> Option<String> {
+    let system_prompt =
+        "You're a GitHub data analysis bot. You're tasked to analyze a GitHub contributor's activity data over the week to detect both key impactful contributions and connections between commits and issues. Highlight specific code changes, resolutions, and improvements.";
+
+    let user_input = &format!(
+        r#"From {_commits_summary}, {_issues_summary}. Analyze the key technical contributions made by {target_person} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph. Do not include nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
+Please ensure that the JSON output is compliant with RFC8259 and can be iterated as simple key-value pairs where the values are strings. Your response should follow this template:
+{{
+"impactful": "Provide a single string value summarizing impactful contributions and their interconnections.",
+"alignment": "Provide a single string value explaining how the contributions align with the project's goals.",
+"patterns": "Provide a single string value identifying any recurring patterns or trends in the contributions.",
+"synergy": "Provide a single string value discussing the synergy between individual and collective advancement.",
+"significance": "Provide a single string value commenting on the significance of the contributions."
+}}
+"#
+    );
+
+    chat_inner(system_prompt, user_input, 250, ChatModel::GPT4Turbo).await.ok()
+}
+
 pub async fn correlate_commits_issues_discussions(
     _profile_data: Option<&str>,
     _commits_summary: Option<&str>,
