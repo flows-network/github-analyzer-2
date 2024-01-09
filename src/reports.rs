@@ -127,10 +127,7 @@ pub async fn weekly_report(
             let mut one_user_report = Vec::<String>::new();
 
             let commits_count = commits_str.lines().count();
-            if commits_count < 2 {
-                log::info!("user_name: {}", user_name);
-                log::info!("{commits_summaries:?}");
-            }
+
             one_user_report.push(format!("found {commits_count} commits:\n{commits_str}"));
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
@@ -139,7 +136,6 @@ pub async fn weekly_report(
                     let issues_str = tup.0.to_owned();
                     issues_count = issues_str.lines().count();
                     if issues_count <= 2 {
-                        log::info!("issue_summaries: {:?}", tup.1.clone());
                     }
                     one_user_report.push(format!("found {issues_count} issues:\n{issues_str}"));
 
@@ -161,6 +157,9 @@ pub async fn weekly_report(
                         // report = vec!["no report generated".to_string()];
                     }
                     Some(final_summary) => {
+                        log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
+                        log::info!("commits_summaries: {commits_summaries:?}");
+                        log::info!("issue_summaries: {:?}", &issues_summaries);
                         if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
                             one_user_report.push(clean_summary);
                         } else {

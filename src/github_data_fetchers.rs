@@ -393,7 +393,7 @@ pub async fn get_commits_in_range_search(
         Ok(commits_page) => {
             for commit in commits_page.items {
                 if let Some(author) = &commit.author {
-                    log::info!("commit author: {:?}", author.clone());
+                    // log::info!("commit author: {:?}", author.clone());
                     git_memory_vec.push(GitMemory {
                         memory_type: MemoryType::Commit,
                         name: author.login.clone(),
