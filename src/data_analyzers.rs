@@ -273,7 +273,7 @@ pub async fn analyze_issue_integrated(
     };
 
     let comments_url = format!(
-        "{}comments?sort=updated&order=desc&per_page=100{}",
+        "{}/comments?sort=updated&order=desc&per_page=100{}",
         issue_url.replace("https://api.github.com/", ""),
         token_str
     );

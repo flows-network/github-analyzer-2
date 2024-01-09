@@ -350,69 +350,7 @@ pub async fn get_issues_in_range(
     }
 }
 
-pub async fn get_issue_texts(issue: &Issue) -> Option<String> {
-    let issue_creator_name = &issue.user.login;
-    let issue_title = &issue.title;
-    let issue_body = match &issue.body {
-        Some(body) => squeeze_fit_remove_quoted(body, 500, 0.6),
-        None => "".to_string(),
-    };
-    let issue_url = &issue.url.to_string();
 
-    let labels = issue
-        .labels
-        .iter()
-        .map(|lab| lab.name.clone())
-        .collect::<Vec<String>>()
-        .join(", ");
-
-    let mut all_text_from_issue = format!(
-        "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
-        issue_creator_name, issue_title, labels, issue_body
-    );
-
-    let mut current_page = 1;
-    loop {
-        let url_str = format!("{}/comments?&page={}", issue_url, current_page);
-
-        let octocrab = get_octo(&GithubLogin::Default);
-
-        match octocrab
-            .get::<Vec<Comment>, _, ()>(&url_str, None::<&()>)
-            .await
-        {
-            Err(_e) => {
-                log::error!(
-                    "Error parsing Vec of Comments at page {}: {:?}",
-                    current_page,
-                    _e
-                );
-                break;
-            }
-            Ok(comments_obj) => {
-                if comments_obj.is_empty() {
-                    break;
-                }
-                for comment in &comments_obj {
-                    let comment_body = match &comment.body {
-                        Some(body) => squeeze_fit_remove_quoted(body, 300, 0.6),
-                        None => "".to_string(),
-                    };
-                    let commenter = &comment.user.login;
-                    let commenter_input = format!("{} commented: {}", commenter, comment_body);
-                    if all_text_from_issue.len() > 45_000 {
-                        break;
-                    }
-                    all_text_from_issue.push_str(&commenter_input);
-                }
-            }
-        }
-
-        current_page += 1;
-    }
-
-    Some(all_text_from_issue)
-}
 pub async fn get_commits_in_range_search(
     owner: &str,
     repo: &str,
