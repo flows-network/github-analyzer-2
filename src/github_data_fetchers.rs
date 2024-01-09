@@ -383,7 +383,7 @@ pub async fn get_issue_texts(issue: &Issue) -> Option<String> {
         {
             Err(_e) => {
                 log::error!(
-                    "Error parsing Vec<Comment> at page {}: {:?}",
+                    "Error parsing Vec of Comments at page {}: {:?}",
                     current_page,
                     _e
                 );

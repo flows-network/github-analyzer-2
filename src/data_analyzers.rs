@@ -281,7 +281,7 @@ pub async fn analyze_issue_integrated(
 
     match octocrab.get::<Vec<Comment>, _, ()>(&comments_url, None::<&()>).await {
         Err(_e) => {
-            log::error!("Error parsing Vec<Comment> : {:?}", _e);
+            log::error!("Error parsing Vec of Comments : {:?}", _e);
         }
         Ok(comments_obj) => {
             for comment in &comments_obj {
