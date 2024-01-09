@@ -15,7 +15,6 @@ pub async fn weekly_report(
     token: Option<String>
 ) -> String {
     let n_days = 7u16;
-    let mut report = Vec::<String>::new();
 
     let mut _profile_data = String::new();
 
@@ -99,14 +98,12 @@ pub async fn weekly_report(
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            report.push(
-                format!("{count} discussions were referenced in analysis:\n {discussions_str}")
-            );
-
             discussion_data = summary;
         }
         Err(_e) => log::error!("No discussions involving user found at {owner}/{repo}: {_e}"),
     }
+
+    let mut report = Vec::<String>::new();
 
     if commits_map.len() == 0 && issues_map.len() == 0 && discussion_data.is_empty() {
         match &user_name {
@@ -127,13 +124,14 @@ pub async fn weekly_report(
     } else {
         for (user_name, (commits_str, commits_summaries)) in commits_map {
             let mut issues_count = 0;
+            let mut one_user_report = Vec::<String>::new();
 
             let commits_count = commits_str.lines().count();
-            if commits_count <= 2 {
+            if commits_count < 2 {
                 log::info!("user_name: {}", user_name);
                 log::info!("{commits_summaries:?}");
             }
-            report.push(format!("found {commits_count} commits:\n{commits_str}"));
+            one_user_report.push(format!("found {commits_count} commits:\n{commits_str}"));
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
             let issues_summaries = match issues_map.get(&user_name) {
@@ -143,7 +141,7 @@ pub async fn weekly_report(
                     if issues_count <= 2 {
                         log::info!("issue_summaries: {:?}", tup.1.clone());
                     }
-                    report.push(format!("found {issues_count} issues:\n{issues_str}"));
+                    one_user_report.push(format!("found {issues_count} issues:\n{issues_str}"));
 
                     tup.1.to_owned()
                 }
@@ -151,7 +149,7 @@ pub async fn weekly_report(
             };
             let total_input_entry_count = (commits_count + issues_count) as u16;
 
-            if commits_count <= 2 {
+            if commits_count < 2 {
                 match
                     correlate_commits_issues_sparse(
                         &commits_summaries,
@@ -164,7 +162,9 @@ pub async fn weekly_report(
                     }
                     Some(final_summary) => {
                         if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                            report.push(clean_summary);
+                            one_user_report.push(clean_summary);
+                        } else {
+                            continue;
                         }
                     }
                 }
@@ -184,10 +184,13 @@ pub async fn weekly_report(
                 }
                 Some(final_summary) => {
                     if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                        report.push(clean_summary);
+                        one_user_report.push(clean_summary);
+                    } else {
+                        continue;
                     }
                 }
             }
+            report.push(one_user_report.join("\n"));
         }
     }
 
