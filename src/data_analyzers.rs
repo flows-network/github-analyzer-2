@@ -185,12 +185,12 @@ pub async fn process_issues(
     for result in results.into_iter().flatten() {
         for item in result {
             let (user_name, url, summary) = item;
-            log::info!(
-                "User: {:?}, Url: {:?}, Summary: {:?}",
-                user_name.clone(),
-                url.clone(),
-                summary.clone()
-            );
+            // log::info!(
+            //     "User: {:?}, Url: {:?}, Summary: {:?}",
+            //     user_name.clone(),
+            //     url.clone(),
+            //     summary.clone()
+            // );
             issues_map
                 .entry(user_name.clone())
                 .and_modify(|tup| {
@@ -400,7 +400,7 @@ pub async fn process_commits(
                     128,
                     ChatModel::GPT35Turbo16K
                 ).await.ok()?;
-                log::info!("Summary: {:?}", summary.clone());
+                // log::info!("Summary: {:?}", summary.clone());
                 Some((commit_obj.name, commit_obj.source_url, summary))
             }
         })
@@ -409,12 +409,12 @@ pub async fn process_commits(
     let results = join_all(commit_futures).await;
     for result in results.into_iter().flatten() {
         let (user_name, url, summary): (String, String, String) = result;
-        log::info!(
-            "User: {:?}, Url: {:?}, Summary: {:?}",
-            user_name.clone(),
-            url.clone(),
-            summary.clone()
-        );
+        // log::info!(
+        //     "User: {:?}, Url: {:?}, Summary: {:?}",
+        //     user_name.clone(),
+        //     url.clone(),
+        //     summary.clone()
+        // );
         commits_map
             .entry(user_name.clone())
             .and_modify(|tup| {

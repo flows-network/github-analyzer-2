@@ -132,9 +132,12 @@ pub async fn weekly_report(
         // }
         for (user_name, (commits_str, commits_summaries)) in commits_map {
             let mut issues_count = 0;
-            // log::info!("user_name: {}", user_name);
+            log::info!("user_name: {}", user_name);
             // log::info!("commits_summaries: {}", commits_summaries);
             let commits_count = commits_str.lines().count();
+            if commits_count <=2 {
+                log::info!("{commits_summaries:?}");
+            }
             report.push(format!("found {commits_count} commits:\n{commits_str}"));
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
@@ -142,7 +145,9 @@ pub async fn weekly_report(
                 Some(tup) => {
                     let issues_str = tup.0.to_owned();
                     issues_count = issues_str.lines().count();
-
+                    if issues_count <=2 {
+                        log::info!("issue_summaries: {:?}", tup.1.clone());
+                    }
                     report.push(format!("found {issues_count} issues:\n{issues_str}"));
 
                     tup.1.to_owned()
