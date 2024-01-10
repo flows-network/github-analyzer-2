@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-
 use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
 use crate::utils::parse_summary_from_raw_json;
-use chrono::{ Duration, Utc };
 use log;
 // use store_flows::{del, get, set, Expire};
 use webhook_flows::send_response;
@@ -15,8 +13,6 @@ pub async fn weekly_report(
     token: Option<String>
 ) -> String {
     let n_days = 7u16;
-
-    let mut _profile_data = String::new();
 
     let contributors_set;
 
@@ -31,8 +27,7 @@ pub async fn weekly_report(
             );
             std::process::exit(1);
         }
-        Ok((owner_repo, summary, inner_set)) => {
-            _profile_data = format!("About {}: {}", owner_repo, summary);
+        Ok((_, _, inner_set)) => {
             contributors_set = inner_set;
         }
     }
@@ -82,30 +77,9 @@ pub async fn weekly_report(
         }
     }
 
-    let now = Utc::now();
-    let a_week_ago = now - Duration::days((n_days as i64) + 30);
-    let n_days_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-
-    let discussion_query = format!("repo:{owner}/{repo} updated:>{n_days_ago_str}");
-
-    let mut discussion_data = String::new();
-    match search_discussions_integrated(&discussion_query, &user_name).await {
-        Ok((summary, discussion_vec)) => {
-            let count = discussion_vec.len();
-            let discussions_str = discussion_vec
-                .iter()
-                .map(|discussion| discussion.source_url.to_owned())
-                .collect::<Vec<String>>()
-                .join("\n");
-
-            discussion_data = summary;
-        }
-        Err(_e) => log::error!("No discussions involving user found at {owner}/{repo}: {_e}"),
-    }
-
     let mut report = Vec::<String>::new();
 
-    if commits_map.len() == 0 && issues_map.len() == 0 && discussion_data.is_empty() {
+    if commits_map.len() == 0 && issues_map.len() == 0 {
         match &user_name {
             Some(target_person) => {
                 report = vec![
@@ -123,92 +97,57 @@ pub async fn weekly_report(
         }
     } else {
         for (user_name, (commits_str, commits_summaries)) in commits_map {
-            let mut issues_count = 0;
             let mut one_user_report = Vec::<String>::new();
 
             let commits_count = commits_str.lines().count();
 
-            one_user_report.push(format!("found {commits_count} commits:\n{commits_str}"));
+            one_user_report.push(
+                format!("{user_name} made {commits_count} commits:\n{commits_str}")
+            );
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(tup) => {
                     let issues_str = tup.0.to_owned();
-                    issues_count = issues_str.lines().count();
-                    if issues_count <= 2 {
-                    }
-                    one_user_report.push(format!("found {issues_count} issues:\n{issues_str}"));
+                    let issues_count = issues_str.lines().count();
+                    one_user_report.push(
+                        format!("{user_name} participated in {issues_count} issues:\n{issues_str}")
+                    );
 
                     tup.1.to_owned()
                 }
                 None => "".to_string(),
             };
-            let total_input_entry_count = (commits_count + issues_count) as u16;
             match
-            correlate_commits_issues_sparse(
-                &commits_summaries,
-                &issues_summaries,
-                &user_name
-            ).await
-        {
-            None => {
-                // report = vec!["no report generated".to_string()];
-            }
-            Some(final_summary) => {
-                log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
-                log::info!("commits_summaries: {commits_summaries:?}");
-                log::info!("issue_summaries: {:?}", &issues_summaries);
-                if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                    one_user_report.push(clean_summary);
-                } else {
-                    continue;
+                correlate_commits_issues_sparse(
+                    &commits_summaries,
+                    &issues_summaries,
+                    &user_name
+                ).await
+            {
+                None => {
+                    log::error!("Error generating report for user: {}", &user_name);
+                    log::info!("commits_summaries: {commits_summaries:?}");
+                    log::info!("issue_summaries: {:?}", &issues_summaries);
+                }
+                Some(final_summary) => {
+                    match parse_summary_from_raw_json(&final_summary) {
+                        Ok(clean_summary) => {
+                            one_user_report.push(clean_summary);
+                        }
+                        Err(_e) => {
+                            log::error!(
+                                "Failed to parse summary for user: {}, summary: {:?}, {:?}",
+                                &user_name,
+                                &final_summary,
+                                _e
+                            );
+
+                            continue;
+                        }
+                    }
                 }
             }
-        }
-            // if commits_count < 2 {
-            //     match
-            //         correlate_commits_issues_sparse(
-            //             &commits_summaries,
-            //             &issues_summaries,
-            //             &user_name
-            //         ).await
-            //     {
-            //         None => {
-            //             // report = vec!["no report generated".to_string()];
-            //         }
-            //         Some(final_summary) => {
-            //             log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
-            //             log::info!("commits_summaries: {commits_summaries:?}");
-            //             log::info!("issue_summaries: {:?}", &issues_summaries);
-            //             if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-            //                 one_user_report.push(clean_summary);
-            //             } else {
-            //                 continue;
-            //             }
-            //         }
-            //     }
-            // }
-            // match
-            //     correlate_commits_issues_discussions(
-            //         Some(&_profile_data),
-            //         Some(&commits_summaries),
-            //         Some(&issues_summaries),
-            //         Some(&discussion_data),
-            //         Some(user_name.as_str()),
-            //         total_input_entry_count
-            //     ).await
-            // {
-            //     None => {
-            //         // report = vec!["no report generated".to_string()];
-            //     }
-            //     Some(final_summary) => {
-            //         if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-            //             one_user_report.push(clean_summary);
-            //         } else {
-            //             continue;
-            //         }
-            //     }
-            // }
             report.push(one_user_report.join("\n"));
         }
     }

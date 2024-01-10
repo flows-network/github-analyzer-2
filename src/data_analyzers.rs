@@ -6,18 +6,6 @@ use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
 use openai_flows::chat::ChatModel;
-use async_openai::{
-    types::{
-        // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestUserMessageArgs,
-        // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs,
-        // FinishReason,
-    },
-    Client,
-};
-
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -442,52 +430,6 @@ pub async fn process_commits(
     Ok(())
 }
 
-/* pub async fn aggregate_commits(
-    inp_vec: Vec<GitMemory>,
-    token: Option<String>,
-) -> anyhow::Result<Vec<(String, String)>> {
-    use futures::future::join_all;
-
-    let commit_futures: Vec<_> = inp_vec.into_iter().map(|commit_obj| {
-        let token = token.clone(); // Clone the token for each future
-        async move {
-            let user_name: &str = &commit_obj.name;
-            let tag_line: &str = &commit_obj.tag_line;
-            let url: &str = &commit_obj.source_url;
-
-            let token_str = match &token {
-                None => String::new(),
-                Some(t) => format!("&token={}", t),
-            };
-            let commit_patch_str = format!("{url}.patch{token_str}");
-            let mut stripped_texts = match github_http_get(&commit_patch_str).await {
-                Ok(w) => String::from_utf8(w).ok()?,
-                Err(e) => {
-                    log::error!("Error getting response from Github: {:?}", e);
-                    return None; // Convert the error into the desired error type (e.g., anyhow::Error)
-                },
-            };
-            stripped_texts = stripped_texts.char_indices().take_while(|(idx, _)| *idx < 24_000).map(|(_, ch)| ch).collect();
-
-            let sys_prompt_1 = format!(
-                "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
-            );
-
-            let usr_prompt_1 = format!(
-                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
-            );
-
-            Some((sys_prompt_1, usr_prompt_1))
-        }
-    }).collect();
-
-    let results = join_all(commit_futures).await;
-
-    let successful_results: Vec<(String, String)> = results.into_iter().flatten().collect();
-
-    Ok(successful_results)
-} */
-
 pub async fn correlate_commits_issues_sparse(
     _commits_summary: &str,
     _issues_summary: &str,
@@ -512,7 +454,7 @@ Please ensure that the JSON output is compliant with RFC8259 and can be iterated
     chat_inner_async(system_prompt, user_input, 500, "gpt-3.5-turbo-1106").await.ok()
 }
 
-pub async fn correlate_commits_issues_discussions(
+/* pub async fn correlate_commits_issues_discussions(
     _profile_data: Option<&str>,
     _commits_summary: Option<&str>,
     _issues_summary: Option<&str>,
@@ -606,7 +548,7 @@ Please ensure that the JSON output is compliant with RFC8259 and can be iterated
         gen_2_size,
         "correlate_commits_issues_discussions"
     ).await.ok()
-}
+} */
 
 pub async fn correlate_user_and_home_project(
     home_repo_data: &str,
