@@ -3,6 +3,7 @@ use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
 use crate::utils::parse_summary_from_raw_json;
 use log;
+use octocrab_wasi::issues;
 // use store_flows::{del, get, set, Expire};
 use webhook_flows::send_response;
 
@@ -52,30 +53,30 @@ pub async fn weekly_report(
 
     let mut issues_map = HashMap::<String, (String, String)>::new();
 
-    'issues_block: {
-        match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
-            Some((count, issue_vec)) => {
-                match count {
-                    0 => {
-                        break 'issues_block;
-                    }
-                    _ => {}
-                }
-                issues_map = match
-                    process_issues(
-                        issue_vec,
-                        user_name.clone(),
-                        contributors_set,
-                        token.clone()
-                    ).await
-                {
-                    Ok(map) => map,
-                    Err(_e) => HashMap::<String, (String, String)>::new(),
-                };
-            }
-            None => log::error!("failed to get issues"),
-        }
-    }
+    // 'issues_block: {
+    //     match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
+    //         Some((count, issue_vec)) => {
+    //             match count {
+    //                 0 => {
+    //                     break 'issues_block;
+    //                 }
+    //                 _ => {}
+    //             }
+    //             issues_map = match
+    //                 process_issues(
+    //                     issue_vec,
+    //                     user_name.clone(),
+    //                     contributors_set,
+    //                     token.clone()
+    //                 ).await
+    //             {
+    //                 Ok(map) => map,
+    //                 Err(_e) => HashMap::<String, (String, String)>::new(),
+    //             };
+    //         }
+    //         None => log::error!("failed to get issues"),
+    //     }
+    // }
 
     let mut report = Vec::<String>::new();
 
@@ -101,17 +102,23 @@ pub async fn weekly_report(
 
             let commits_count = commits_str.lines().count();
 
-            one_user_report.push(
-                format!("{user_name} made {commits_count} commits:\n{commits_str}")
-            );
+            let commits_count_str = match commits_count {
+                1 => String::from("1 commit"),
+                _ => format!("{} commits", commits_count),
+            };
+            one_user_report.push(format!("{user_name} made {commits_count_str}:\n{commits_str}"));
             // log::info!("found {commits_count} commits:\n{commits_str}");
 
             let issues_summaries = match issues_map.get(&user_name) {
                 Some(tup) => {
                     let issues_str = tup.0.to_owned();
                     let issues_count = issues_str.lines().count();
+                    let issues_count_str = match issues_count {
+                        1 => String::from("1 issue"),
+                        _ => format!("{} issues", issues_count),
+                    };
                     one_user_report.push(
-                        format!("{user_name} participated in {issues_count} issues:\n{issues_str}")
+                        format!("{user_name} participated in {issues_count_str}:\n{issues_str}")
                     );
 
                     tup.1.to_owned()
@@ -152,5 +159,5 @@ pub async fn weekly_report(
         }
     }
 
-    report.join("\n")
+    report.join("\n\n")
 }

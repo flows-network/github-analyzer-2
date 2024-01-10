@@ -31,3 +31,4 @@ futures = "0.3.30"
 octocrab_wasi = { version = "0.19.1", features = ["wasi"], default-features = false }
 store-flows = "0.3.1"
 openai-flows = "0.9.1"
+regex = "1.10.2"

@@ -198,6 +198,56 @@ pub async fn chat_inner_async(
 }
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
+    use regex::Regex;
+    let mut parsed = match serde_json::from_str(input) {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Error parsing JSON: {:?}", e);
+            // Attempt to extract fields using regex if JSON parsing fails
+            let mut values_map = std::collections::HashMap::new();
+            let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+            for key in keys.iter() {
+                let regex_pattern = format!(r#""{}":\s*"([^"]*)""#, key);
+                let regex = Regex::new(&regex_pattern).map_err(|_|
+                    anyhow::Error::msg("Failed to compile regex pattern")
+                ).expect("Failed to compile regex pattern");
+                if let Some(captures) = regex.captures(input) {
+                    if let Some(value) = captures.get(1) {
+                        values_map.insert(*key, value.as_str().to_string());
+                    }
+                }
+            }
+
+            if values_map.len() != keys.len() {
+                return Err(anyhow::Error::msg("Failed to extract all fields from JSON"));
+            }
+
+            Value::Object(
+                values_map
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), Value::String(v)))
+                    .collect()
+            )
+        }
+    };
+
+    let mut output = String::new();
+    let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+
+    for key in keys.iter() {
+        if let Some(value) = parsed.get(*key) {
+            if value.is_string() {
+                if !output.is_empty() {
+                    output.push_str(" ");
+                }
+                output.push_str(value.as_str().unwrap());
+            }
+        }
+    }
+
+    Ok(output)
+}
+/* pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     let parsed: Value = match serde_json::from_str(input) {
         Ok(v) => v,
         Err(_e) => {log::error!("Error parsing json: {:?}", _e); return Err(anyhow::anyhow!(_e))},
@@ -218,7 +268,7 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
         }
     }
     Ok(output)
-}
+} */
 
 pub fn parse_issue_summary_from_json(input: &str) -> anyhow::Result<Vec<(String, String)>> {
     let parsed: serde_json::Map<String, serde_json::Value> = serde_json::from_str(input)?;
