@@ -144,51 +144,71 @@ pub async fn weekly_report(
                 None => "".to_string(),
             };
             let total_input_entry_count = (commits_count + issues_count) as u16;
-
-            if commits_count < 2 {
-                match
-                    correlate_commits_issues_sparse(
-                        &commits_summaries,
-                        &issues_summaries,
-                        &user_name
-                    ).await
-                {
-                    None => {
-                        // report = vec!["no report generated".to_string()];
-                    }
-                    Some(final_summary) => {
-                        log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
-                        log::info!("commits_summaries: {commits_summaries:?}");
-                        log::info!("issue_summaries: {:?}", &issues_summaries);
-                        if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                            one_user_report.push(clean_summary);
-                        } else {
-                            continue;
-                        }
-                    }
-                }
-            }
             match
-                correlate_commits_issues_discussions(
-                    Some(&_profile_data),
-                    Some(&commits_summaries),
-                    Some(&issues_summaries),
-                    Some(&discussion_data),
-                    Some(user_name.as_str()),
-                    total_input_entry_count
-                ).await
-            {
-                None => {
-                    // report = vec!["no report generated".to_string()];
-                }
-                Some(final_summary) => {
-                    if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
-                        one_user_report.push(clean_summary);
-                    } else {
-                        continue;
-                    }
+            correlate_commits_issues_sparse(
+                &commits_summaries,
+                &issues_summaries,
+                &user_name
+            ).await
+        {
+            None => {
+                // report = vec!["no report generated".to_string()];
+            }
+            Some(final_summary) => {
+                log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
+                log::info!("commits_summaries: {commits_summaries:?}");
+                log::info!("issue_summaries: {:?}", &issues_summaries);
+                if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+                    one_user_report.push(clean_summary);
+                } else {
+                    continue;
                 }
             }
+        }
+            // if commits_count < 2 {
+            //     match
+            //         correlate_commits_issues_sparse(
+            //             &commits_summaries,
+            //             &issues_summaries,
+            //             &user_name
+            //         ).await
+            //     {
+            //         None => {
+            //             // report = vec!["no report generated".to_string()];
+            //         }
+            //         Some(final_summary) => {
+            //             log::info!("user: {}, summary: {:?}", &user_name, &final_summary);
+            //             log::info!("commits_summaries: {commits_summaries:?}");
+            //             log::info!("issue_summaries: {:?}", &issues_summaries);
+            //             if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+            //                 one_user_report.push(clean_summary);
+            //             } else {
+            //                 continue;
+            //             }
+            //         }
+            //     }
+            // }
+            // match
+            //     correlate_commits_issues_discussions(
+            //         Some(&_profile_data),
+            //         Some(&commits_summaries),
+            //         Some(&issues_summaries),
+            //         Some(&discussion_data),
+            //         Some(user_name.as_str()),
+            //         total_input_entry_count
+            //     ).await
+            // {
+            //     None => {
+            //         // report = vec!["no report generated".to_string()];
+            //     }
+            //     Some(final_summary) => {
+            //         if let Ok(clean_summary) = parse_summary_from_raw_json(&final_summary) {
+            //             one_user_report.push(clean_summary);
+            //         } else {
+            //             continue;
+            //         }
+            //     }
+            // }
             report.push(one_user_report.join("\n"));
         }
     }
