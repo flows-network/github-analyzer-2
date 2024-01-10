@@ -439,8 +439,10 @@ pub async fn correlate_commits_issues_sparse(
         "You're a GitHub data analysis bot. You're tasked to analyze a GitHub contributor's activity data over the week to detect both key impactful contributions and connections between commits and issues. Highlight specific code changes, resolutions, and improvements.";
 
     let user_input = &format!(
-        r#"From {_commits_summary}, {_issues_summary}. Analyze the key technical contributions made by {target_person} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph. Do not include nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
-Please ensure that the JSON output is compliant with RFC8259 and can be iterated as simple key-value pairs where the values are strings. Your response should follow this template:
+        r#"From {_commits_summary}, {_issues_summary}. Analyze the key technical contributions made by {target_person} this week and summarize the information into a flat JSON structure with just one level of depth. Each key in the JSON should map directly to a single string value describing the contribution or observation in a full sentence or a short paragraph without using nested objects or arrays. If no information is available for a point, provide an empty string as the value. 
+Please ensure that the JSON output does not include any Markdown formatting, such as code block syntax ("```") or escaped characters (like "\\n" for new lines). The output should be plain JSON that can be parsed directly without any preprocessing.
+
+Your JSON response should use the following keys with appropriate string values:
 {{
 "impactful": "Provide a single string value summarizing impactful contributions and their interconnections.",
 "alignment": "Provide a single string value explaining how the contributions align with the project's goals.",
@@ -448,7 +450,7 @@ Please ensure that the JSON output is compliant with RFC8259 and can be iterated
 "synergy": "Provide a single string value discussing the synergy between individual and collective advancement.",
 "significance": "Provide a single string value commenting on the significance of the contributions."
 }}
-"#
+Ensure that the JSON is properly formatted, with correct escaping of special characters, and is ready to be parsed by a JSON parser that expects RFC8259-compliant JSON. Avoid adding any non-JSON content or formatting."#
     );
 
     chat_inner_async(system_prompt, user_input, 500, "gpt-3.5-turbo-1106").await.ok()

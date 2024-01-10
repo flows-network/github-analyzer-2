@@ -312,7 +312,7 @@ pub async fn get_issues_in_range(
 
     let mut out = Vec::new();
 
-    for _n in 1..4 {
+    for _n in 1..3 {
         let url_str = format!(
             "search/issues?q={}&sort=updated&order=desc&per_page=100&page={}{}",
             encoded_query,
@@ -388,7 +388,7 @@ pub async fn get_commits_in_range_search(
     let mut git_memory_vec = vec![];
     let octocrab = get_octo(&GithubLogin::Default);
 
-    for _n in 1..4 {
+    for _n in 1..3 {
         let url_str = format!(
             "search/commits?q={}&sort=committer-date&order=desc&per_page=100&page={}{}",
             query,
