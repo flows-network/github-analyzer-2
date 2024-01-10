@@ -281,6 +281,7 @@ pub async fn get_readme_owner_repo(about_repo: &str) -> Option<String> {
         }
     }
 }
+
 pub async fn get_issues_in_range(
     owner: &str,
     repo: &str,
@@ -306,26 +307,38 @@ pub async fn get_issues_in_range(
         None => String::new(),
         Some(t) => format!("&token={}", t.as_str()),
     };
-    let url_str =
-        format!("search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}", encoded_query);
-    // let url_str = format!(
-    //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
 
     let octocrab = get_octo(&GithubLogin::Default);
 
-    match octocrab.get::<Page<Issue>, _, ()>(&url_str, None::<&()>).await {
-        Err(e) => {
-            log::error!("error: {:?}", e);
-            None
-        }
-        Ok(issue_page) => {
-            // let count = issue_page.total_count.unwrap_or(0);
-            let count = issue_page.items.len();
-            Some((count, issue_page.items))
+    let mut out = Vec::new();
+
+    for _n in 1..4 {
+        let url_str = format!(
+            "search/issues?q={}&sort=updated&order=desc&per_page=100&page={}{}",
+            encoded_query,
+            _n,
+            token_str
+        );
+        // let url_str = format!(
+        //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
+        //     encoded_query
+        // );
+
+        match octocrab.get::<Page<Issue>, _, ()>(&url_str, None::<&()>).await {
+            Err(e) => {
+                log::error!("Error getting paginated issues: {:?}", e);
+                continue;
+            }
+            Ok(issue_page) => {
+                out.extend(issue_page.items.clone().into_iter());
+                if &issue_page.items.len() < &100 {
+                    break;
+                }
+            }
         }
     }
+    let count = out.len();
+    Some((count, out))
 }
 
 pub async fn get_commits_in_range_search(
@@ -372,40 +385,44 @@ pub async fn get_commits_in_range_search(
 
     let query = format!("repo:{}/{}{}%20committer-date:>{}", owner, repo, author_str, n_days_ago);
     // let encoded_query = urlencoding::encode(&query);
-
-    let url_str = format!(
-        "search/commits?q={}&sort=committer-date&order=desc&per_page=100{}",
-        query,
-        token_str
-    );
-    // let url_str = format!(
-    //     "https://api.github.com/search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
-
     let mut git_memory_vec = vec![];
     let octocrab = get_octo(&GithubLogin::Default);
 
-    match octocrab.get::<Page<GithubCommit>, _, ()>(&url_str, None::<&()>).await {
-        Err(e) => {
-            log::error!("Error parsing commits: {:?}", e);
-        }
-        Ok(commits_page) => {
-            for commit in commits_page.items {
-                if let Some(author) = &commit.author {
-                    // log::info!("commit author: {:?}", author.clone());
-                    git_memory_vec.push(GitMemory {
-                        memory_type: MemoryType::Commit,
-                        name: author.login.clone(),
-                        tag_line: commit.commit.message.clone(),
-                        source_url: commit.html_url.clone(),
-                        payload: String::from(""),
-                    });
+    for _n in 1..4 {
+        let url_str = format!(
+            "search/commits?q={}&sort=committer-date&order=desc&per_page=100&page={}{}",
+            query,
+            _n,
+            token_str
+        );
+        // let url_str = format!(
+        //     "https://api.github.com/search/commits?q={}&sort=author-date&order=desc&per_page=100{token_str}",
+        //     encoded_query
+        // );
+
+        match octocrab.get::<Page<GithubCommit>, _, ()>(&url_str, None::<&()>).await {
+            Err(e) => {
+                log::error!("Error parsing commits: {:?}", e);
+            }
+            Ok(commits_page) => {
+                for commit in &commits_page.items {
+                    if let Some(author) = &commit.author {
+                        // log::info!("commit author: {:?}", author.clone());
+                        git_memory_vec.push(GitMemory {
+                            memory_type: MemoryType::Commit,
+                            name: author.login.clone(),
+                            tag_line: commit.commit.message.clone(),
+                            source_url: commit.html_url.clone(),
+                            payload: String::from(""),
+                        });
+                    }
+                }
+                if &commits_page.items.len() < &100 {
+                    break;
                 }
             }
         }
     }
-
     let count = git_memory_vec.len();
 
     Some((count, git_memory_vec))
@@ -1252,7 +1269,7 @@ pub async fn search_discussions_integrated(
     }
 
     if git_mem_vec.is_empty() {
-        Err(anyhow::anyhow!("No results found.").into())
+        Err(anyhow::Error::msg("No results found."))
     } else {
         Ok((text_out, git_mem_vec))
     }
