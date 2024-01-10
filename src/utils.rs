@@ -13,7 +13,6 @@ use async_openai::{
     Client,
 };
 
-
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
     let mut inside_quote = false;
@@ -199,7 +198,10 @@ pub async fn chat_inner_async(
 }
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
-    let parsed: Value = serde_json::from_str(input)?;
+    let parsed: Value = match serde_json::from_str(input) {
+        Ok(v) => v,
+        Err(_e) => {log::error!("Error parsing json: {:?}", _e); return Err(anyhow::anyhow!(_e))},
+    };
 
     let mut output = String::new();
 
@@ -215,7 +217,6 @@ pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
             }
         }
     }
-
     Ok(output)
 }
 
