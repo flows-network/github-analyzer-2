@@ -199,7 +199,7 @@ pub async fn chat_inner_async(
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     use regex::Regex;
-    let mut parsed = match serde_json::from_str(input) {
+    let  parsed = match serde_json::from_str(input) {
         Ok(v) => v,
         Err(e) => {
             log::error!("Error parsing JSON: {:?}", e);

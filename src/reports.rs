@@ -3,7 +3,7 @@ use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
 use crate::utils::parse_summary_from_raw_json;
 use log;
-use octocrab_wasi::issues;
+// use octocrab_wasi::issues;
 // use store_flows::{del, get, set, Expire};
 use webhook_flows::send_response;
 
@@ -53,30 +53,30 @@ pub async fn weekly_report(
 
     let mut issues_map = HashMap::<String, (String, String)>::new();
 
-    // 'issues_block: {
-    //     match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
-    //         Some((count, issue_vec)) => {
-    //             match count {
-    //                 0 => {
-    //                     break 'issues_block;
-    //                 }
-    //                 _ => {}
-    //             }
-    //             issues_map = match
-    //                 process_issues(
-    //                     issue_vec,
-    //                     user_name.clone(),
-    //                     contributors_set,
-    //                     token.clone()
-    //                 ).await
-    //             {
-    //                 Ok(map) => map,
-    //                 Err(_e) => HashMap::<String, (String, String)>::new(),
-    //             };
-    //         }
-    //         None => log::error!("failed to get issues"),
-    //     }
-    // }
+    'issues_block: {
+        match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
+            Some((count, issue_vec)) => {
+                match count {
+                    0 => {
+                        break 'issues_block;
+                    }
+                    _ => {}
+                }
+                issues_map = match
+                    process_issues(
+                        issue_vec,
+                        user_name.clone(),
+                        contributors_set,
+                        token.clone()
+                    ).await
+                {
+                    Ok(map) => map,
+                    Err(_e) => HashMap::<String, (String, String)>::new(),
+                };
+            }
+            None => log::error!("failed to get issues"),
+        }
+    }
 
     let mut report = Vec::<String>::new();
 
