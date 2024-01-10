@@ -6,6 +6,18 @@ use log;
 use serde::Deserialize;
 use std::collections::{ HashMap, HashSet };
 use openai_flows::chat::ChatModel;
+use async_openai::{
+    types::{
+        // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs,
+        // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs,
+        // FinishReason,
+    },
+    Client,
+};
+
 
 pub async fn get_repo_info(about_repo: &str) -> Option<String> {
     #[derive(Deserialize)]
@@ -497,7 +509,7 @@ Please ensure that the JSON output is compliant with RFC8259 and can be iterated
 "#
     );
 
-    chat_inner(system_prompt, user_input, 250, ChatModel::GPT4Turbo).await.ok()
+    chat_inner_async(system_prompt, user_input, 500, "gpt-3.5-turbo-1106").await.ok()
 }
 
 pub async fn correlate_commits_issues_discussions(

@@ -1,6 +1,18 @@
 use openai_flows::{ chat::{ ChatModel, ChatOptions }, OpenAIFlows };
 use log;
 use serde_json::Value;
+use async_openai::{
+    types::{
+        // ChatCompletionFunctionsArgs, ChatCompletionRequestMessage,
+        ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs,
+        // ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs,
+        // FinishReason,
+    },
+    Client,
+};
+
 
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
@@ -150,7 +162,7 @@ pub async fn chat_inner(
     }
 }
 
-/* pub async fn chat_inner(
+pub async fn chat_inner_async(
     system_prompt: &str,
     user_input: &str,
     max_token: u16,
@@ -184,7 +196,7 @@ pub async fn chat_inner(
         }
         None => Err(anyhow::anyhow!("Failed to get reply from OpenAI")),
     }
-} */
+}
 
 pub fn parse_summary_from_raw_json(input: &str) -> anyhow::Result<String> {
     let parsed: Value = serde_json::from_str(input)?;
