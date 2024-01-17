@@ -8,8 +8,7 @@ use log;
 use webhook_flows::send_response;
 
 pub async fn weekly_report(
-    owner: &str,
-    repo: &str,
+    owner_repo: &str,
     user_name: Option<String>,
     token: Option<String>
 ) -> String {
@@ -17,7 +16,7 @@ pub async fn weekly_report(
 
     let contributors_set;
 
-    match is_valid_owner_repo(owner, repo).await {
+    match is_valid_owner_repo(owner_repo).await {
         Err(_e) => {
             send_response(
                 400,
@@ -36,7 +35,7 @@ pub async fn weekly_report(
     let mut commits_map = HashMap::<String, (String, String)>::new();
     'commits_block: {
         match
-            get_commits_in_range_search(owner, repo, user_name.clone(), n_days, token.clone()).await
+            get_commits_in_range_search(owner_repo, user_name.clone(), n_days, token.clone()).await
         {
             Some((count, commits_vec)) => {
                 match count {
@@ -54,7 +53,7 @@ pub async fn weekly_report(
     let mut issues_map = HashMap::<String, (String, String)>::new();
 
     'issues_block: {
-        match get_issues_in_range(owner, repo, user_name.clone(), n_days, token.clone()).await {
+        match get_issues_in_range(owner_repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
                 match count {
                     0 => {

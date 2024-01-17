@@ -145,27 +145,7 @@ pub async fn get_user_data_by_login(login: &str) -> anyhow::Result<String> {
     Ok(out)
 }
 
-pub async fn get_community_profile_data(owner: &str, repo: &str) -> Option<String> {
-    #[derive(Deserialize, Debug)]
-    struct CommunityProfile {
-        description: String,
-        // documentation: Option<String>,
-    }
-
-    let community_profile_url = format!("repos/{owner}/{repo}/community/profile");
-
-    let octocrab = get_octo(&GithubLogin::Default);
-
-    match octocrab.get::<CommunityProfile, _, ()>(&community_profile_url, None::<&()>).await {
-        Ok(profile) => {
-            return Some(format!("Description: {}", profile.description));
-        }
-        Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
-    }
-    None
-}
-
-pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, octocrab::Error> {
+pub async fn get_contributors(owner_repo: &str) -> Result<Vec<String>, octocrab::Error> {
     #[derive(Debug, Deserialize)]
     struct GithubUser {
         login: String,
@@ -175,7 +155,7 @@ pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, oc
     'outer: for n in 1..50 {
         log::info!("contributors loop {}", n);
 
-        let contributors_route = format!("repos/{owner}/{repo}/contributors?per_page=100&page={n}");
+        let contributors_route = format!("repos/{owner_repo}/contributors?per_page=100&page={n}");
 
         match octocrab.get::<Vec<GithubUser>, _, ()>(&contributors_route, None::<&()>).await {
             Ok(user_vec) => {
@@ -199,13 +179,13 @@ pub async fn get_contributors(owner: &str, repo: &str) -> Result<Vec<String>, oc
     Ok(contributors)
 }
 
-pub async fn get_readme(owner: &str, repo: &str) -> Option<String> {
+pub async fn get_readme(owner_repo: &str) -> Option<String> {
     #[derive(Deserialize, Debug)]
     struct GithubReadme {
         content: Option<String>,
     }
 
-    let readme_url = format!("repos/{owner}/{repo}/readme");
+    let readme_url = format!("repos/{owner_repo}/readme");
 
     let octocrab = get_octo(&GithubLogin::Default);
 
@@ -283,8 +263,7 @@ pub async fn get_readme_owner_repo(about_repo: &str) -> Option<String> {
 }
 
 pub async fn get_issues_in_range(
-    owner: &str,
-    repo: &str,
+    owner_repo: &str,
     user_name: Option<String>,
     range: u16,
     token: Option<String>
@@ -301,7 +280,7 @@ pub async fn get_issues_in_range(
 
     let user_str = user_name.map_or(String::new(), |u| format!("involves:{}", u));
 
-    let query = format!("repo:{owner}/{repo} is:issue {user_str} updated:>{n_days_ago}");
+    let query = format!("repo:{owner_repo} is:issue {user_str} updated:>{n_days_ago}");
     let encoded_query = urlencoding::encode(&query);
     let token_str = match token {
         None => String::new(),
@@ -342,8 +321,7 @@ pub async fn get_issues_in_range(
 }
 
 pub async fn get_commits_in_range_search(
-    owner: &str,
-    repo: &str,
+    owner_repo: &str,
     user_name: Option<String>,
     range: u16,
     token: Option<String>
@@ -383,7 +361,7 @@ pub async fn get_commits_in_range_search(
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
 
-    let query = format!("repo:{}/{}{}%20committer-date:>{}", owner, repo, author_str, n_days_ago);
+    let query = format!("repo:{}{}%20committer-date:>{}", owner_repo, author_str, n_days_ago);
     // let encoded_query = urlencoding::encode(&query);
     let mut git_memory_vec = vec![];
     let octocrab = get_octo(&GithubLogin::Default);
@@ -427,106 +405,6 @@ pub async fn get_commits_in_range_search(
 
     Some((count, git_memory_vec))
 }
-
-/* pub async fn get_commits_in_range(
-    owner: &str,
-    repo: &str,
-    user_name: Option<String>,
-    range: u16,
-    token: Option<String>,
-) -> Option<(usize, Vec<GitMemory>, Vec<GitMemory>)> {
-    #[derive(Debug, Deserialize, Serialize, Clone)]
-    struct User {
-        login: String,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct GithubCommit {
-        sha: String,
-        html_url: String,
-        author: Option<User>,    // made nullable
-        committer: Option<User>, // made nullable
-        commit: CommitDetails,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct CommitDetails {
-        author: CommitUserDetails,
-        message: String,
-        // committer: CommitUserDetails,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    struct CommitUserDetails {
-        date: Option<DateTime<Utc>>,
-    }
-    let token_str = match &token {
-        None => String::from(""),
-        Some(t) => format!("&token={}", t.as_str()),
-    };
-    let author_str = match &user_name {
-        None => String::from(""),
-        Some(t) => format!("&author={}", t.as_str()),
-    };
-    let base_commit_url =
-        format!("repos/{owner}/{repo}/commits?{author_str}&sort=desc&per_page=100{token_str}");
-    // let base_commit_url =
-    //     format!("https://api.github.com/repos/{owner}/{repo}/commits?&author={author}&sort=desc&per_page=100{token_str}");
-
-    // let url_str = format!(
-    //     "search/commits?q={}&sort=updated&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
-    // let url_str = format!(
-    //     "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
-    //     encoded_query
-    // );
-
-    let mut git_memory_vec = vec![];
-    let now = Utc::now();
-    let n_days_ago = (now - Duration::days(range as i64)).date_naive();
-    let octocrab = get_octo(&GithubLogin::Default);
-
-    // match octocrab
-    // .get::<Page<Issue>, _, ()>(&url_str, None::<&()>)
-    // .await
-
-    match octocrab
-        .get::<Vec<GithubCommit>, _, ()>(&base_commit_url, None::<&()>)
-        .await
-    {
-        Err(e) => {
-            log::error!("Error parsing commits: {:?}", e);
-        }
-        Ok(commits) => {
-            for commit in commits {
-                if let Some(commit_date) = &commit.commit.author.date {
-                    if commit_date.date_naive() <= n_days_ago {
-                        continue;
-                    }
-
-                    if let Some(user_name) = &user_name {
-                        if let Some(author) = &commit.author {
-                            if author.login.as_str() == user_name {
-                                git_memory_vec.push(GitMemory {
-                                    memory_type: MemoryType::Commit,
-                                    name: author.login.clone(),
-                                    tag_line: commit.commit.message.clone(),
-                                    source_url: commit.html_url.clone(),
-                                    payload: String::from(""),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let count = git_memory_vec.len();
-
-    Some((count, git_memory_vec))
-} */
 
 pub async fn get_user_repos_in_language(user: &str, language: &str) -> Option<Vec<Repository>> {
     #[derive(Debug, Deserialize)]
